@@ -62,4 +62,6 @@ yarn.lock
 
 AGENTS.md
 CLAUDE.md
-
+chi_tra.traineddata
+dainam.traineddata
+eng.traineddata
