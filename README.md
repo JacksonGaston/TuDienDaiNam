@@ -24,12 +24,18 @@ A fully offline mobile dictionary application for the Dainamese language, design
 - **Xcode** (for iOS development, macOS only)
 - **Physical device or emulator** for testing
 
-## 🖼️ PNG Image Processing (Database Generation)
+## 📝 Text File Processing (Database Generation)
 
-### Step 1: Prepare PNG Images
-1. Place your Dainamese dictionary PNG images in the `/images/` directory
-2. Example: The existing `b1s3.png` file contains dictionary page data
-3. Ensure images are high-quality (300 DPI recommended) for best OCR results
+### Step 1: Prepare Text Files
+1. Place your Dainamese dictionary text files in the `/data/` directory
+2. Use the format: `word [pronunciation] (word_type). definition`
+3. Ensure UTF-8 encoding for proper Dainamese character support
+
+**Example text file content:**
+```
+hello [həˈloʊ] (interjection). A greeting used when meeting someone.
+dictionary [ˈdɪkʃəˌnɛri] (noun). A reference work containing words and their meanings.
+```
 
 ### Step 2: Backend Setup
 ```bash
@@ -39,25 +45,21 @@ cd /home/litemnt/Projects/TuDienDaiNam/backend
 # Install dependencies
 npm install
 
-# Install OCR dependencies
-npm install tesseract.js sqlite3 fs-extra path
-
-# For better OCR performance, install system Tesseract:
-# Ubuntu/Debian: sudo apt-get install tesseract-ocr
-# macOS: brew install tesseract
-# Windows: Download from https://github.com/UB-Mannheim/tesseract/wiki
+# Install required packages
+npm install sqlite3 fs-extra path
 ```
 
-### Step 3: Process PNG Images
+### Step 3: Process Text Files
 ```bash
-# Process all PNG images in /images/ directory
-npm run process
+# Generate database from text files in /data/ directory
+npm run build-db
 
 # This will:
-# 1. Extract text from each PNG using OCR
+# 1. Read all .txt files from /data/ directory
 # 2. Parse and structure the dictionary entries
-# 3. Generate search indexes
-# 4. Create the final SQLite database
+# 3. Validate entries for quality and completeness
+# 4. Generate search indexes
+# 5. Create the final SQLite database
 ```
 
 ### Step 4: Verify Database Generation
@@ -70,10 +72,10 @@ npm run build-db -- --verify
 ```
 
 ### Step 5: Manual Validation (Recommended)
-1. Review OCR output in `backend/output/ocr-results.json`
-2. Check for any text extraction errors
+1. Review text file format in `/data/` directory
+2. Check for any parsing errors in logs
 3. Validate Dainamese character encoding
-4. Manually correct any critical errors if needed
+4. Test search functionality with verification tools
 
 ## 🛠️ Development Mode
 
@@ -85,8 +87,9 @@ cd /home/litemnt/Projects/TuDienDaiNam/backend
 # Install dependencies
 npm install
 
-# Run OCR processing on existing images
-npm run process
+# Add your dictionary text files to /data/ directory
+# Then generate the database
+npm run build-db
 
 # Monitor processing logs for any errors
 # Database will be generated in frontend/assets/database/
@@ -136,7 +139,7 @@ cd /home/litemnt/Projects/TuDienDaiNam/backend
 rm -rf ../frontend/assets/database/dictionary.db
 
 # Generate optimized production database
-NODE_ENV=production npm run process
+NODE_ENV=production npm run build-db
 
 # Optimize database size
 npm run build-db -- --optimize
@@ -265,18 +268,20 @@ expo build:ios --type archive
 
 ## 🔧 Troubleshooting
 
-### OCR Processing Issues
+### Text Processing Issues
 ```bash
-# If OCR fails on specific images
-npm run process -- --image b1s3.png --debug
+# If text parsing fails
+# Check file format in /data/ directory
+# Ensure UTF-8 encoding
+# Verify entry structure: word [pronunciation] (type). definition
 
-# Check Tesseract installation
-tesseract --version
+# Debug specific files
+npm run build-db -- --debug
 
-# Improve OCR quality
-# - Ensure images are high contrast
-# - Try different image preprocessing
-# - Manually verify difficult characters
+# Check text file quality
+# - Ensure consistent formatting
+# - Verify Dainamese character encoding
+# - Check for empty lines or malformed entries
 ```
 
 ### Database Issues
@@ -318,8 +323,8 @@ expo start --reset-cache
 ## 🔄 Maintenance and Updates
 
 ### Updating Dictionary Data
-1. Add new PNG images to `/images/`
-2. Run `npm run process` in backend
+1. Add new text files to `/data/`
+2. Run `npm run build-db` in backend
 3. Test updated database thoroughly
 4. Build and submit new app version
 

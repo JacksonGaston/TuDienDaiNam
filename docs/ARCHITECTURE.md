@@ -14,9 +14,9 @@ A fully offline mobile dictionary application for the Dainamese language with no
 - **UI**: Blue (#1E90FF), white (#FFFFFF), and yellow (#FFD700) color scheme
 
 ### 2. Backend (Development-Only Processing)
-- **Purpose**: One-time OCR processing and database generation
+- **Purpose**: One-time text processing and database generation
 - **Technology**: Node.js
-- **OCR Engine**: Tesseract.js
+- **Text Parser**: Custom dictionary entry parser
 - **Output**: Pre-built SQLite database file
 - **Location**: Runs only during development, not included in final app
 
@@ -42,12 +42,11 @@ TuDienDaiNam/
 │   └── package.json
 ├── backend/                 # Development-only data processing
 │   ├── src/
-│   │   ├── ocr/            # OCR processing pipeline
 │   │   ├── parser/         # Text parsing and structuring
 │   │   └── database/       # SQLite database generation
 │   └── package.json
-├── images/                  # Source PNG images
-│   └── *.png               # Raw dictionary data
+├── data/                    # Source text files
+│   └── *.txt               # Raw dictionary data
 └── docs/                    # Documentation
     └── ARCHITECTURE.md
 ```
@@ -55,8 +54,8 @@ TuDienDaiNam/
 ## Data Flow
 
 ### Development Phase
-1. Raw PNG images in `/images/` are processed by backend OCR pipeline
-2. Extracted text is parsed into structured dictionary entries
+1. Text dictionary files in `/data/` are processed by backend text pipeline
+2. Text is parsed into structured dictionary entries
 3. Data is normalized for Dainamese language rules
 4. Structured data is imported into SQLite database
 5. Generated `dictionary.db` is copied to `frontend/assets/database/`
@@ -76,8 +75,8 @@ TuDienDaiNam/
 - **App updates**: Dictionary updates require new app versions
 
 ## Development Workflow
-1. Add new PNG images to `/images/`
-2. Run backend OCR processing to generate updated `dictionary.db`
+1. Add new text files to `/data/`
+2. Run backend text processing to generate updated `dictionary.db`
 3. Replace `frontend/assets/database/dictionary.db` with new file
 4. Build and deploy updated mobile app
 
