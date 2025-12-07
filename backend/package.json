@@ -1,0 +1,18 @@
+{
+  "name": "tuidiendainam-backend",
+  "version": "1.0.0",
+  "description": "OCR processing pipeline for Dainamese dictionary PNG images",
+  "main": "index.js",
+  "scripts": {
+    "process": "node src/ocr/process-images.js",
+    "build-db": "node src/database/generate-db.js"
+  },
+  "keywords": [
+    "ocr",
+    "dictionary",
+    "dainamese",
+    "data-processing"
+  ],
+  "author": "",
+  "license": "ISC"
+}
