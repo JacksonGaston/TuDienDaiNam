@@ -13,6 +13,7 @@ const HomeScreen = ({ navigation }) => {
   const [stats, setStats] = useState(null);
   const [randomWords, setRandomWords] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     loadData();
@@ -21,12 +22,13 @@ const HomeScreen = ({ navigation }) => {
   const loadData = async () => {
     try {
       setIsLoading(true);
+      setError(null);
       await dictionaryService.initialize();
-      
+
       const wordCount = await dictionaryService.getWordCount();
       const dainameseCount = await dictionaryService.getDainameseWordCount();
       const randomWordsData = await dictionaryService.getRandomWords(5);
-      
+
       setStats({
         totalWords: wordCount,
         dainameseWords: dainameseCount,
@@ -34,6 +36,7 @@ const HomeScreen = ({ navigation }) => {
       setRandomWords(randomWordsData);
     } catch (error) {
       console.error('Error loading data:', error);
+      setError('Failed to load dictionary database. Please restart the app.');
     } finally {
       setIsLoading(false);
     }
@@ -52,6 +55,21 @@ const HomeScreen = ({ navigation }) => {
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#007AFF" />
         <Text style={styles.loadingText}>Loading dictionary...</Text>
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.errorContainer}>
+        <Text style={styles.errorTitle}>Database Error</Text>
+        <Text style={styles.errorText}>{error}</Text>
+        <TouchableOpacity
+          style={styles.retryButton}
+          onPress={loadData}
+        >
+          <Text style={styles.retryButtonText}>Retry</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -290,6 +308,37 @@ const styles = StyleSheet.create({
     color: '#666',
     lineHeight: 20,
     marginBottom: 12,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
+    backgroundColor: '#f5f5f5',
+  },
+  errorTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#d32f2f',
+    marginBottom: 16,
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 22,
+  },
+  retryButton: {
+    backgroundColor: '#007AFF',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
 

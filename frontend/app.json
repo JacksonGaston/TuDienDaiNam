@@ -34,7 +34,8 @@
         {
           "iosDatabaseLocation": "Library/Database"
         }
-      ]
+      ],
+      "expo-asset"
     ]
   }
 }
