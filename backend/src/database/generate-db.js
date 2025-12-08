@@ -70,6 +70,10 @@ class DatabaseGenerator {
       
       const seedingResult = await this.seeder.seedWords(this.db, validEntries);
       
+      const wordsWithIds = await this.addIdsToEntries(validEntries);
+      
+      await this.seeder.generateSuggestions(this.db, wordsWithIds);
+      
       await this.seeder.updateSearchIndex(this.db);
       
       if (options.optimize !== false) {
@@ -140,7 +144,7 @@ class DatabaseGenerator {
       const wordsWithIds = [];
       
       for (const entry of entries) {
-        const row = await this.db.get('SELECT id FROM words WHERE word = ?', [entry.word]);
+        const row = await this.getQuery('SELECT id FROM words WHERE word = ?', [entry.word]);
         if (row) {
           wordsWithIds.push({ ...entry, id: row.id });
         } else {
@@ -155,13 +159,37 @@ class DatabaseGenerator {
     }
   }
 
+  async runQuery(sql, params = []) {
+    return new Promise((resolve, reject) => {
+      this.db.run(sql, params, function(err) {
+        if (err) {
+          reject(err);
+        } else {
+          resolve({ changes: this.changes, lastID: this.lastID });
+        }
+      });
+    });
+  }
+
+  async getQuery(sql, params = []) {
+    return new Promise((resolve, reject) => {
+      this.db.get(sql, params, (err, row) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(row);
+        }
+      });
+    });
+  }
+
   async clearExistingData() {
     try {
       await logger.info('Clearing existing database data...');
       
-      await this.db.run('DELETE FROM suggestions');
-      await this.db.run('DELETE FROM search_index');
-      await this.db.run('DELETE FROM words');
+      await this.runQuery('DELETE FROM suggestions');
+      await this.runQuery('DELETE FROM search_index');
+      await this.runQuery('DELETE FROM words');
       
       await logger.info('Existing data cleared');
     } catch (error) {

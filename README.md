@@ -103,6 +103,9 @@ cd /home/litemnt/Projects/TuDienDaiNam/frontend
 # Install dependencies
 npm install
 
+# Install babel-preset-expo explicitly (required for Expo 54+)
+npm install babel-preset-expo
+
 # Install Expo CLI if not already installed
 npm install -g @expo/cli
 
@@ -304,6 +307,13 @@ expo start --reset-cache
 
 # Check database file exists in app bundle
 # Use React Native Debugger to inspect app state
+
+# If you get "Cannot find module 'babel-preset-expo'" error:
+npm install babel-preset-expo
+
+# If you get JIMP CRC error with PNG files:
+# Ensure all PNG files in assets/ are standard 8-bit/color RGBA format
+# Regenerate icons using standard image editing tools
 ```
 
 ## 📊 Performance Optimization

@@ -110,7 +110,7 @@ class DatabaseSchema {
       await logger.info('Creating database tables...');
       
       for (const [tableName, createSQL] of Object.entries(this.tables)) {
-        await db.run(createSQL);
+        await this.runQuery(db, createSQL);
         await logger.debug(`Created table: ${tableName}`);
       }
       
@@ -126,7 +126,7 @@ class DatabaseSchema {
       await logger.info('Creating database indexes...');
       
       for (const [indexName, indexSQL] of Object.entries(this.indexes)) {
-        await db.run(indexSQL);
+        await this.runQuery(db, indexSQL);
         await logger.debug(`Created index: ${indexName}`);
       }
       
@@ -142,7 +142,7 @@ class DatabaseSchema {
       await logger.info('Creating database triggers...');
       
       for (const [triggerName, triggerSQL] of Object.entries(this.triggers)) {
-        await db.run(triggerSQL);
+        await this.runQuery(db, triggerSQL);
         await logger.debug(`Created trigger: ${triggerName}`);
       }
       
@@ -183,7 +183,7 @@ class DatabaseSchema {
       ];
       
       for (const dropSQL of dropTables) {
-        await db.run(dropSQL);
+        await this.runQuery(db, dropSQL);
       }
       
       await logger.info('All tables dropped successfully');
@@ -195,9 +195,9 @@ class DatabaseSchema {
 
   async getSchemaInfo(db) {
     try {
-      const tables = await db.all("SELECT name FROM sqlite_master WHERE type='table'");
-      const indexes = await db.all("SELECT name FROM sqlite_master WHERE type='index'");
-      const triggers = await db.all("SELECT name FROM sqlite_master WHERE type='trigger'");
+      const tables = await this.allQuery(db, "SELECT name FROM sqlite_master WHERE type='table'");
+      const indexes = await this.allQuery(db, "SELECT name FROM sqlite_master WHERE type='index'");
+      const triggers = await this.allQuery(db, "SELECT name FROM sqlite_master WHERE type='trigger'");
       
       return {
         tables: tables.map(t => t.name),
@@ -218,7 +218,7 @@ class DatabaseSchema {
         VALUES (?, ?, ?, ?)
       `;
       
-      await db.run(logSQL, [operation, status, message, details ? JSON.stringify(details) : null]);
+      await this.runQuery(db, logSQL, [operation, status, message, details ? JSON.stringify(details) : null]);
     } catch (error) {
       await logger.error('Failed to log operation', { error: error.message });
     }
@@ -228,8 +228,8 @@ class DatabaseSchema {
     try {
       await logger.info('Optimizing database...');
       
-      await db.run('VACUUM');
-      await db.run('ANALYZE');
+      await this.runQuery(db, 'VACUUM');
+      await this.runQuery(db, 'ANALYZE');
       
       await logger.info('Database optimization completed');
     } catch (error) {
@@ -240,6 +240,42 @@ class DatabaseSchema {
 
   getTableSchema(tableName) {
     return this.tables[tableName];
+  }
+
+  async runQuery(db, sql, params = []) {
+    return new Promise((resolve, reject) => {
+      db.run(sql, params, function(err) {
+        if (err) {
+          reject(err);
+        } else {
+          resolve({ changes: this.changes, lastID: this.lastID });
+        }
+      });
+    });
+  }
+
+  async getQuery(db, sql, params = []) {
+    return new Promise((resolve, reject) => {
+      db.get(sql, params, (err, row) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(row);
+        }
+      });
+    });
+  }
+
+  async allQuery(db, sql, params = []) {
+    return new Promise((resolve, reject) => {
+      db.all(sql, params, (err, rows) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(rows);
+        }
+      });
+    });
   }
 
   getAllSchemas() {

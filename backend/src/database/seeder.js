@@ -69,7 +69,7 @@ class DatabaseSeeder {
       try {
         const processedEntry = this.processEntry(entry);
         
-        await db.run(insertSQL, [
+        await this.runQuery(db, insertSQL, [
           processedEntry.word,
           processedEntry.normalizedWord,
           processedEntry.pronunciation,
@@ -114,7 +114,7 @@ class DatabaseSeeder {
     try {
       await logger.info('Generating search suggestions...');
       
-      await db.run('DELETE FROM suggestions');
+      await this.runQuery(db, 'DELETE FROM suggestions');
       
       let suggestionCount = 0;
       
@@ -205,25 +205,28 @@ class DatabaseSeeder {
       VALUES (?, ?, ?)
     `;
     
-    await db.run(insertSQL, [wordId, suggestion.similarWords, suggestion.relevanceScore]);
+    await this.runQuery(db, insertSQL, [wordId, suggestion.similarWords, suggestion.relevanceScore]);
   }
 
   async updateSearchIndex(db) {
     try {
       await logger.info('Updating search index...');
       
-      await db.run('DELETE FROM search_index');
+      await this.runQuery(db, 'DELETE FROM search_index');
       
       const insertSQL = `
         INSERT INTO search_index (rowid, word, normalized_word, definition, examples)
         SELECT id, word, normalized_word, definition, examples FROM words
       `;
       
-      const result = await db.run(insertSQL);
+      const result = await this.runQuery(db, insertSQL);
       
-      await logger.info(`Search index updated with ${result.changes} entries`);
+      const countResult = await this.getQuery(db, 'SELECT COUNT(*) as count FROM search_index');
+      const indexedEntries = countResult ? countResult.count : 0;
       
-      return { indexedEntries: result.changes };
+      await logger.info(`Search index updated with ${indexedEntries} entries`);
+      
+      return { indexedEntries };
     } catch (error) {
       await logger.error('Search index update failed', { error: error.message });
       throw error;
@@ -245,7 +248,7 @@ class DatabaseSeeder {
         timestamp: new Date().toISOString()
       };
       
-      await db.run(logSQL, [
+      await this.runQuery(db, logSQL, [
         'database_seeding',
         errorCount === 0 ? 'success' : 'partial_success',
         `Seeded ${successCount}/${totalEntries} entries`,
@@ -258,16 +261,16 @@ class DatabaseSeeder {
 
   async getSeedingStats(db) {
     try {
-      const wordCount = await db.get('SELECT COUNT(*) as count FROM words');
-      const suggestionCount = await db.get('SELECT COUNT(*) as count FROM suggestions');
-      const dainameseCount = await db.get('SELECT COUNT(*) as count FROM words WHERE is_dainamese = 1');
-      const avgQuality = await db.get('SELECT AVG(text_quality) as avg_quality FROM words');
+      const wordCount = await this.getQuery(db, 'SELECT COUNT(*) as count FROM words');
+      const suggestionCount = await this.getQuery(db, 'SELECT COUNT(*) as count FROM suggestions');
+      const dainameseCount = await this.getQuery(db, 'SELECT COUNT(*) as count FROM words WHERE is_dainamese = 1');
+      const avgQuality = await this.getQuery(db, 'SELECT AVG(text_quality) as avg_quality FROM words');
       
       return {
         totalWords: wordCount ? wordCount.count : 0,
         totalSuggestions: suggestionCount ? suggestionCount.count : 0,
         dainameseWords: dainameseCount ? dainameseCount.count : 0,
-        averageQuality: avgQuality ? avgQuality.avg_quality || 0 : 0,
+        averageConfidence: avgQuality ? avgQuality.avg_quality || 0 : 0,
         timestamp: new Date().toISOString()
       };
     } catch (error) {
@@ -280,6 +283,42 @@ class DatabaseSeeder {
         timestamp: new Date().toISOString()
       };
     }
+  }
+
+  async runQuery(db, sql, params = []) {
+    return new Promise((resolve, reject) => {
+      db.run(sql, params, function(err) {
+        if (err) {
+          reject(err);
+        } else {
+          resolve({ changes: this.changes, lastID: this.lastID });
+        }
+      });
+    });
+  }
+
+  async getQuery(db, sql, params = []) {
+    return new Promise((resolve, reject) => {
+      db.get(sql, params, (err, row) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(row);
+        }
+      });
+    });
+  }
+
+  async allQuery(db, sql, params = []) {
+    return new Promise((resolve, reject) => {
+      db.all(sql, params, (err, rows) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(rows);
+        }
+      });
+    });
   }
 
   setBatchSize(size) {
