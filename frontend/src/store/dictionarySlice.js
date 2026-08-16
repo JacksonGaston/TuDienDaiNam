@@ -1,12 +1,12 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import { dictionaryService } from '../services/dictionaryService';
 
-export const searchWords = createAsyncThunk(
-  'dictionary/searchWords',
+export const searchWord = createAsyncThunk(
+  'dictionary/searchWord',
   async (query, { rejectWithValue }) => {
     try {
-      const results = await dictionaryService.searchWords(query);
-      return results;
+      const result = await dictionaryService.searchWord(query);
+      return result;
     } catch (error) {
       return rejectWithValue(error.message);
     }
@@ -29,8 +29,7 @@ export const getSuggestions = createAsyncThunk(
   'dictionary/getSuggestions',
   async (query, { rejectWithValue }) => {
     try {
-      const suggestions = await dictionaryService.getSuggestions(query);
-      return suggestions;
+      return await dictionaryService.getSuggestions(query);
     } catch (error) {
       return rejectWithValue(error.message);
     }
@@ -40,6 +39,7 @@ export const getSuggestions = createAsyncThunk(
 const dictionarySlice = createSlice({
   name: 'dictionary',
   initialState: {
+    searchResult: { match: null, suggestions: [], notFound: false },
     searchResults: [],
     currentWord: null,
     suggestions: [],
@@ -49,6 +49,7 @@ const dictionarySlice = createSlice({
   },
   reducers: {
     clearSearch: (state) => {
+      state.searchResult = { match: null, suggestions: [], notFound: false };
       state.searchResults = [];
       state.suggestions = [];
     },
@@ -56,9 +57,7 @@ const dictionarySlice = createSlice({
       const word = action.payload;
       if (!state.searchHistory.some(item => item.id === word.id)) {
         state.searchHistory.unshift(word);
-        if (state.searchHistory.length > 20) {
-          state.searchHistory.pop();
-        }
+        if (state.searchHistory.length > 20) state.searchHistory.pop();
       }
     },
     clearHistory: (state) => {
@@ -67,15 +66,15 @@ const dictionarySlice = createSlice({
   },
   extraReducers: (builder) => {
     builder
-      .addCase(searchWords.pending, (state) => {
+      .addCase(searchWord.pending, (state) => {
         state.isLoading = true;
         state.error = null;
       })
-      .addCase(searchWords.fulfilled, (state, action) => {
+      .addCase(searchWord.fulfilled, (state, action) => {
         state.isLoading = false;
-        state.searchResults = action.payload;
+        state.searchResult = action.payload;
       })
-      .addCase(searchWords.rejected, (state, action) => {
+      .addCase(searchWord.rejected, (state, action) => {
         state.isLoading = false;
         state.error = action.payload;
       })
@@ -91,17 +90,8 @@ const dictionarySlice = createSlice({
         state.isLoading = false;
         state.error = action.payload;
       })
-      .addCase(getSuggestions.pending, (state) => {
-        state.isLoading = true;
-        state.error = null;
-      })
       .addCase(getSuggestions.fulfilled, (state, action) => {
-        state.isLoading = false;
         state.suggestions = action.payload;
-      })
-      .addCase(getSuggestions.rejected, (state, action) => {
-        state.isLoading = false;
-        state.error = action.payload;
       });
   },
 });

@@ -6,23 +6,23 @@ class EntryValidator {
     this.normalizer = new DainameseNormalizer();
     this.validationRules = {
       word: {
-        minLength: 2,
-        maxLength: 50,
-        allowedChars: /^[a-zA-ZáàâäãåçéèêëíìîïñóòôöõøúùûüýÿæœÁÀÂÄÃÅÇÉÈÊËÍÌÎÏÑÓÒÔÖÕØÚÙÛÜÝŸÆŒ\-\']+$/,
-        forbiddenPatterns: [/^\d+$/, /^[^\w\s]+$/, /^\s+$/]
+        minLength: 1,
+        maxLength: 80,
+        allowedChars: /^[a-zA-Z0-9\u00C0-\u024F\u1EA0-\u1EFF'\-\s]+$/u,
+        forbiddenPatterns: [/^\d+$/, /^[^a-zA-Z\u00C0-\u024F\u1EA0-\u1EFF\s]+$/, /^\s+$/]
       },
       definition: {
-        minLength: 5,
-        maxLength: 1000,
-        forbiddenPatterns: [/^[^\w\s]+$/, /^\s+$/]
+        minLength: 1,
+        maxLength: 60000,
+        forbiddenPatterns: [/^\s+$/]
       },
       pronunciation: {
         maxLength: 100,
-        allowedChars: /^[a-zA-ZáàâäãåçéèêëíìîïñóòôöõøúùûüýÿæœÁÀÂÄÃÅÇÉÈÊËÍÌÎÏÑÓÒÔÖÕØÚÙÛÜÝŸÆŒ\s\-\[\],\.\/]+$/
+        allowedChars: /^[a-zA-Z0-9\u00C0-\u024F\u1EA0-\u1EFF\s\-\[\],\.\/]+$/u
       },
       wordType: {
         maxLength: 50,
-        allowedTypes: ['noun', 'verb', 'adjective', 'adverb', 'pronoun', 'preposition', 'conjunction', 'interjection', 'article', '']
+        allowedTypes: ['c.', 'n.', 'v.', 'c. n.', 'n. c.', 'adj.', 'adv.', 'pron.', 'prep.', 'conj.', 'interj.', 'art.', '']
       }
     };
   }
@@ -107,7 +107,7 @@ class EntryValidator {
     }
 
     if (definition.length > rules.maxLength) {
-      result.errors.push(`Definition is too long (${definition.length} > ${rules.maxLength})`);
+      result.warnings.push(`Definition is very long (${definition.length} chars)`);
     }
 
     for (const pattern of rules.forbiddenPatterns) {

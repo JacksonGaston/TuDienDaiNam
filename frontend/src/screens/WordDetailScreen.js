@@ -102,9 +102,21 @@ const WordDetailScreen = ({ route, navigation }) => {
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Definition</Text>
-        <Text style={styles.definition}>{currentWord.definition}</Text>
+        <Text style={styles.sectionTitle}>Meaning</Text>
+        <Text style={styles.definition}>{currentWord.meaning}</Text>
       </View>
+
+      {currentWord.compounds && currentWord.compounds.length > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Compounds</Text>
+          {currentWord.compounds.map((item, index) => (
+            <View key={index} style={styles.exampleItem}>
+              <Text style={styles.compoundText}>{item.compound}</Text>
+              {item.meaning ? <Text style={styles.exampleText}> — {item.meaning}</Text> : null}
+            </View>
+          ))}
+        </View>
+      )}
 
       {currentWord.examples && currentWord.examples.length > 0 && (
         <View style={styles.section}>
@@ -249,6 +261,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 24,
     color: '#212529',
+  },
+  compoundText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#212529',
+    marginBottom: 4,
   },
   exampleItem: {
     backgroundColor: '#f8f9fa',

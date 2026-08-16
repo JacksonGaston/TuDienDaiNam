@@ -1,223 +1,265 @@
 const logger = require('../utils/logger');
 const DainameseNormalizer = require('./dainamese-normalizer');
 
+const DASH_TOKENS = /[—―]|--/g;
+const HAS_DASH_RE = /[—―]|--/;
+const MARKER_START_RE = /^[|{}#\[\]]/;
+const DASH_START_RE = /^[—―-]/;
+const ANCESTOR_PREFIX_RE = /^([\u3000-\u303F\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF\uE000-\uF8FF\u{20000}-\u{2FA1F}\s\|]*)/u;
+const VIET_LETTER = '[a-zA-ZÀ-ỹ]';
+const VIET_WORD = '[a-zA-ZÀ-ỹ][a-zA-ZÀ-ỹ\\s\\-]*';
+const WORD_PERIOD_RE = new RegExp('^' + VIET_WORD + '\\.\\s', 'u');
+const WORD_PERIOD_END_RE = new RegExp('^' + VIET_WORD + '\\.\\s*$', 'u');
+const WORD_PERIOD_BARE_RE = new RegExp('^' + VIET_WORD + '\\.', 'u');
+
+function stripToSingleDash(text) {
+  return text.replace(DASH_TOKENS, '—');
+}
+
 class TextParser {
   constructor() {
     this.normalizer = new DainameseNormalizer();
   }
 
   async parseTextFile(textFile) {
-    try {
-      if (!textFile || !textFile.content) {
-        throw new Error('Invalid text file provided');
-      }
-
-      await logger.info(`Parsing text file: ${textFile.filename}`);
-
-      const entries = this.extractDictionaryEntries(textFile.content, textFile);
-
-      const parsedResult = {
-        ...textFile,
-        parsedEntries: entries,
-        totalEntries: entries.length,
-        parsingTimestamp: new Date().toISOString()
-      };
-
-      await logger.info(`Parsed ${entries.length} dictionary entries from ${textFile.filename}`);
-
-      return parsedResult;
-    } catch (error) {
-      await logger.error(`Failed to parse text file ${textFile?.filename}`, { error: error.message });
-      throw error;
+    if (!textFile || !textFile.content) {
+      throw new Error('Invalid text file provided');
     }
+    await logger.info(`Parsing text file: ${textFile.filename}`);
+    const entries = this.extractDictionaryEntries(textFile.content, textFile);
+    const parsedResult = {
+      ...textFile,
+      parsedEntries: entries,
+      totalEntries: entries.length,
+      parsingTimestamp: new Date().toISOString()
+    };
+    await logger.info(`Parsed ${entries.length} dictionary entries from ${textFile.filename}`);
+    return parsedResult;
   }
 
-  /**
-   * Extract dictionary entries by detecting blocks separated by blank lines
-   * Each block represents one dictionary entry with:
-   * - First line: "ancient_char word. (optional_pronunciation). type. meaning"
-   * - Following lines: examples, additional definitions
-   * - Block ends with an empty line
-   */
   extractDictionaryEntries(text, textFile = null) {
     const entries = [];
-    const blocks = this.extractBlocks(text);
-
-    for (let i = 0; i < blocks.length; i++) {
-      const block = blocks[i];
-      const blockLines = block.split('\n');
-
-      if (blockLines.length === 0) continue;
-
-      const firstLine = blockLines[0].trim();
-
-      if (!firstLine) continue;
-
-      const parsedEntry = this.parseBlock(firstLine, block, blockLines, i, textFile);
-
-      if (parsedEntry) {
-        entries.push(parsedEntry);
+    const lines = text.split(/\r?\n/);
+    let currentBlock = null;
+    let blockIndex = -1;
+    for (const line of lines) {
+      if (this.isHeadwordLine(line)) {
+        if (currentBlock) {
+          this.finalizeBlock(currentBlock, blockIndex, textFile, entries);
+        }
+        blockIndex++;
+        currentBlock = { firstLine: line, continuationLines: [] };
+      } else {
+        if (!currentBlock) {
+          logger.warn('Parser: ignoring non-headword line before any block');
+          continue;
+        }
+        currentBlock.continuationLines.push(line);
       }
     }
-
+    if (currentBlock) {
+      this.finalizeBlock(currentBlock, blockIndex, textFile, entries);
+    }
     return entries;
   }
 
-  /**
-   * Split text into blocks separated by one or more blank lines
-   * Each block represents a single dictionary entry
-   */
-  extractBlocks(text) {
-    // Split by two or more newlines (handles blank line separation)
-    return text.split(/\n[\s\n]*\n/)
-      .map(block => block.trim())
-      .filter(block => block.length > 0);
+  finalizeBlock(block, blockIndex, textFile, entries) {
+    const parsedEntry = this.parseBlock(block, blockIndex, textFile);
+    if (parsedEntry) {
+      entries.push(parsedEntry);
+    }
   }
 
-  /**
-   * Parse a dictionary block to extract entry data
-   */
-  parseBlock(firstLine, fullBlock, blockLines, blockIndex, textFile) {
+  isHeadwordLine(line) {
+    if (!line) return false;
+    const t = line.trim();
+    if (!t) return false;
+    const ts = line.trimStart();
+    if (MARKER_START_RE.test(ts)) return false;
+    if (DASH_START_RE.test(ts)) return false;
+    const tab = line.indexOf('\t');
+    if (tab === -1) return false;
+    const after = line.slice(tab + 1);
+    if (!WORD_PERIOD_RE.test(after)) return false;
+    const fp = after.indexOf('.');
+    const fd = after.search(HAS_DASH_RE);
+    if (fd !== -1 && fp !== -1 && fd < fp) return false;
+    if (fd !== -1 && fp === -1) return false;
+    return true;
+  }
+
+  parseBlock(block, blockIndex, textFile) {
     try {
-      const searchableWordData = this.extractSearchableWord(firstLine);
+      const firstLine = block.firstLine;
+      const { ancientChar, wordLine } = this.splitAncestor(firstLine);
+      if (!wordLine) return null;
 
-      if (!searchableWordData || !searchableWordData.searchableWord) {
-        return null;
-      }
-
-      const { searchableWord, wordType, rawWord } = searchableWordData;
+      const head = this.extractHeadwordParts(wordLine);
+      if (!head) return null;
+      const { word, pronunciation, wordType, meaning: rawMeaning, inlineCompounds } = head;
 
       const entry = {
-        word: searchableWord,
-        originalWord: rawWord,
-        pronunciation: '',
-        wordType: wordType,
-        definition: fullBlock,
-        examples: [],
+        word: word,
+        originalWord: word,
+        pronunciation: this.normalizer.normalizeText(pronunciation || ''),
+        wordType: this.normalizer.normalizeText(wordType || ''),
+        meaning: this.normalizer.normalizeText(rawMeaning || ''),
+        compounds: [],
         sourceLine: blockIndex + 1,
-        rawText: firstLine,
         sourceFile: textFile?.filename || '',
-        textQuality: textFile?.quality || 1.0
+        textQuality: textFile?.quality || 1.0,
+        ancientChar: this.normalizer.normalizeText(ancientChar || ''),
+        rawText: firstLine.trim()
       };
 
-      return this.finalizeEntry(entry);
+      for (const c of inlineCompounds) {
+        const comp = this.parseCompoundStatement(c, word, ancientChar, true);
+        if (comp) entry.compounds.push(comp);
+      }
+      for (const line of block.continuationLines) {
+        const comp = this.parseCompoundLine(line, word, ancientChar);
+        if (comp) entry.compounds.push(comp);
+      }
 
+      return this.finalizeEntry(entry);
     } catch (error) {
-      logger.warn(`Failed to parse block starting with: ${firstLine.substring(0, 50)}...`);
+      logger.warn(`Failed to parse block at index ${blockIndex}: ${error.message}`);
       return null;
     }
   }
 
-  /**
-   * Extract the searchable word from the first line of a block
-   *
-   * Line format: "ancient_char searchable_word. (pronunciation). word_type. meaning..."
-   * Example 1: "阿    A. c. Đèo, nương dựa..."
-   * Example 2: "丫    A. (Nha.) c. Cái cháng hai..."
-   * Example 3: "阿    A. n. Tiếng than kêu..."
-   *
-   * Searchable word is the 2nd word position (after ancient character)
-   *
-   * Edge cases:
-   * - May have pronunciation in parentheses: "A. (Nha.)"
-   * - May have only 2 parts total: "A. Definition..."
-   * - May have multiple dots within word: handle carefully
-   */
-  extractSearchableWord(firstLine) {
-    // Remove extra whitespace but preserve original spacing info
-    const cleanLine = firstLine.trim().replace(/\s+/g, ' ');
+  splitAncestor(firstLine) {
+    const t = firstLine.trim();
+    const m = t.match(ANCESTOR_PREFIX_RE);
+    const prefix = m ? m[1] : '';
+    const wordLine = m ? t.slice(m[0].length) : t;
+    const ancientChar = prefix.replace(/\s/g, '').replace(/\|/g, '');
+    return { ancientChar: ancientChar || '', wordLine };
+  }
 
-    // Find the positions of dots (.)
-    const dotPositions = [];
-    for (let i = 0; i < cleanLine.length; i++) {
-      if (cleanLine[i] === '.') {
-        dotPositions.push(i);
+  extractHeadwordParts(afterTab) {
+    try {
+      let rest = afterTab.trim();
+      const wordMatch = rest.match(/^([^\.]+?)\./);
+      if (!wordMatch) return null;
+      const word = wordMatch[1].trim();
+      if (!word) return null;
+      rest = rest.substring(wordMatch[0].length).trim();
+
+      let pronunciation = '';
+      const pronMatch = PRON_PAREN.exec(rest);
+      if (pronMatch) {
+        pronunciation = pronMatch[1].trim().replace(/\.$/, '');
+        rest = rest.substring(pronMatch[0].length).trim();
       }
-    }
 
-    if (dotPositions.length < 2) {
-      return null; // Need at least 2 dots to define the searchable word
-    }
-
-    let searchableWordEndPos = dotPositions[1];
-    let wordType = '';
-    let searchableWord;
-    let pronunciation = '';
-
-    // Check if there's pronunciation in parentheses after the first dot
-    const afterFirstDot = cleanLine.substring(dotPositions[0] + 1).trim();
-
-    if (afterFirstDot.startsWith('(')) {
-      // Case: "丫    A. (Nha.) c. Cái cháng hai..."
-      // Find the closing parenthesis
-      const closingParenPos = cleanLine.indexOf(')', dotPositions[0]);
-      if (closingParenPos > dotPositions[0] && dotPositions.length >= 3) {
-        // The searchable word is before the first dot, pronunciation after it
-        // From "丫    A. (Nha.) c. ..." we want word: "A", pronunciation: "(Nha.)", type: "c"
-
-        // Find where the first word ends (ancient character)
-        const firstSpace = cleanLine.indexOf(' ');
-        if (firstSpace === -1) {
-          return null;
+      const typeTokens = [];
+      let m;
+      const localType = /^([a-zA-ZÀ-ỹ]{1,5})\.\s+/g;
+      while ((m = localType.exec(rest)) !== null) {
+        if (m.index === 0 || rest[m.index - 1] === ' ') {
+          typeTokens.push(m[1]);
+          rest = rest.substring(m[0].length);
+          localType.lastIndex = 0;
+        } else {
+          break;
         }
+      }
 
-        // Extract just the word (between ancient char and first dot)
-        searchableWord = cleanLine.substring(firstSpace + 1, dotPositions[0]).trim();
+      const wordType = typeTokens.map(t => t + '.').join(' ');
 
-        // Extract pronunciation (between first dot and closing paren, include parentheses for full display)
-        const pronunciationWithParens = cleanLine.substring(dotPositions[0] + 1, closingParenPos + 1).trim();
-        // Clean pronunciation by removing leading/trailing punctuation and spaces
-        pronunciation = pronunciationWithParens.replace(/^[\(.\s]+|[\).\s]+$/g, '');
-
-        // Extract word type (between closing paren and third dot, remove dot)
-        if (dotPositions.length >= 3) {
-          const typeWithDot = cleanLine.substring(closingParenPos + 1, dotPositions[2]).trim();
-          wordType = typeWithDot.replace(/\.$/, '');
+      const inlineCompounds = [];
+      let meaning = rest.trim();
+      const dashIdx = meaning.search(HAS_DASH_RE);
+      if (dashIdx !== -1) {
+        const cut = meaning.lastIndexOf('.', dashIdx);
+        if (cut !== -1) {
+          const compoundPart = meaning.substring(cut + 1).trim();
+          meaning = meaning.substring(0, cut).trim();
+          inlineCompounds.push(compoundPart);
         }
-      } else {
-        return null; // Malformed pronunciation format
-      }
-    } else {
-      // Standard case: "阿    A. c. Definition..."
-      // Find where the first word ends (ancient character)
-      const firstSpace = cleanLine.indexOf(' ');
-      if (firstSpace === -1) {
-        return null;
       }
 
-      // Extract just the word (between ancient char and first dot)
-      searchableWord = cleanLine.substring(firstSpace + 1, dotPositions[0]).trim();
-
-      // Word type is between second and third dot (if exists), remove dot
-      if (dotPositions.length >= 3) {
-        const typeStart = dotPositions[1] + 1;
-        const typeWithDot = cleanLine.substring(typeStart, dotPositions[2]).trim();
-        wordType = typeWithDot.replace(/\.$/, '');
-      }
+      return { word, pronunciation, wordType, meaning, inlineCompounds };
+    } catch (error) {
+      logger.warn(`Failed to extract headword parts: ${error.message}`);
+      return null;
     }
+  }
 
-    // Clean up the searchable word
-    if (!searchableWord) return null;
+  parseCompoundLine(line, headword, ancientChar) {
+    const raw = line.trim();
+    if (!raw) return null;
+    if (raw.startsWith('{')) return null;
+    if (/^\}+$/.test(raw)) return null;
+    return this.parseCompoundStatement(raw, headword, ancientChar, false);
+  }
+
+  parseCompoundStatement(statement, headword, ancientChar, isInline) {
+    const cleaned = stripToSingleDash(statement);
+    const { text, variant } = stripVariantPrefix(cleaned);
+    const { phrase, meaning } = this.splitPhraseMeaning(text);
+    return this.buildCompound(phrase, meaning, variant, headword, ancientChar);
+  }
+
+  splitPhraseMeaning(text) {
+    const pipeIdx = text.indexOf('|');
+    if (pipeIdx !== -1) {
+      const before = text.substring(0, pipeIdx).trim();
+      const after = text.substring(pipeIdx + 1).trim();
+      const head = HAS_DASH_RE.test(before) ? before : (HAS_DASH_RE.test(after) ? after : before);
+      const other = HAS_DASH_RE.test(before) ? after : before;
+      return { phrase: head, meaning: other };
+    }
+    const dotIdx = text.indexOf('.');
+    if (dotIdx === -1) {
+      return { phrase: text.trim(), meaning: '' };
+    }
+    return {
+      phrase: text.substring(0, dotIdx).trim(),
+      meaning: text.substring(dotIdx + 1).trim()
+    };
+  }
+
+  buildCompound(phrase, meaning, variant, headword, ancientChar) {
+    let phraseCore = phrase;
+    const stripped = stripVariantPrefix(phraseCore);
+    const finalVariant = variant || stripped.variant;
+    phraseCore = stripped.text;
+
+    const expanded = phraseCore.replace(DASH_TOKENS, headword);
+    if (!expanded) {
+      return null;
+    }
 
     return {
-      searchableWord: searchableWord,
-      wordType: wordType,
-      pronunciation: pronunciation,
-      rawWord: searchableWord + (pronunciation ? ` (${pronunciation})` : '')
+      phrase: this.normalizer.normalizeText(phraseCore),
+      compound: this.normalizer.normalizeText(expanded),
+      rawPhrase: this.normalizer.normalizeText(phrase),
+      meaning: this.normalizer.normalizeText(meaning || ''),
+      ancientChars: this.normalizer.normalizeText(finalVariant || ancientChar),
+      isCompound: true
     };
   }
 
   finalizeEntry(entry) {
-    entry.definition = this.normalizer.normalizeText(entry.definition);
-    entry.pronunciation = this.normalizer.normalizeText(entry.pronunciation);
-    entry.wordType = this.normalizer.normalizeText(entry.wordType);
-    entry.examples = entry.examples.map(ex => this.normalizer.normalizeText(ex));
-
-    entry.searchVariations = this.normalizer.generateSearchVariations(entry.word);
-    entry.normalizedWord = this.normalizer.normalizeWord(entry.word);
+    entry.normalizedWord = this.normalizer.normalizeForSearch(entry.word);
     entry.isDainamese = this.normalizer.isDainameseWord(entry.word);
-
+    entry.searchVariations = this.normalizer.generateSearchVariations(entry.word);
+    entry.definition = this.buildDefinition(entry);
     return entry;
+  }
+
+  buildDefinition(entry) {
+    const parts = [];
+    let header = `${entry.word}. ${entry.wordType || ''}`.trim();
+    if (entry.pronunciation) header += ` [${entry.pronunciation}]`;
+    parts.push(header);
+    parts.push(entry.meaning);
+    for (const c of (entry.compounds || [])) {
+      parts.push(c.compound + (c.meaning ? `. ${c.meaning}` : ''));
+    }
+    return parts.filter(p => p).join('\n');
   }
 
   splitIntoLines(text) {
@@ -233,6 +275,7 @@ class TextParser {
       totalFiles: textFiles.length,
       successfulParses: 0,
       totalEntries: 0,
+      totalCompounds: 0,
       averageEntriesPerFile: 0
     };
 
@@ -242,12 +285,15 @@ class TextParser {
         allEntries.push(...parsedResult.parsedEntries);
         parsingStats.successfulParses++;
         parsingStats.totalEntries += parsedResult.parsedEntries.length;
+        parsingStats.totalCompounds += parsedResult.parsedEntries.reduce((sum, e) => sum + (e.compounds?.length || 0), 0);
       } catch (error) {
         await logger.error(`Failed to parse ${textFile.filename}`, { error: error.message });
       }
     }
 
-    parsingStats.averageEntriesPerFile = parsingStats.totalEntries / parsingStats.successfulParses;
+    parsingStats.averageEntriesPerFile = parsingStats.successfulParses > 0
+      ? parsingStats.totalEntries / parsingStats.successfulParses
+      : 0;
 
     return {
       entries: allEntries,
@@ -258,28 +304,27 @@ class TextParser {
 
   validateEntry(entry) {
     const errors = [];
-
-    if (!entry.word || entry.word.length < 1) {
-      errors.push('Word is too short or missing');
-    }
-
-    if (!entry.definition || entry.definition.length < 5) {
-      errors.push('Definition is too short or missing');
-    }
-
-    if (entry.word === entry.definition) {
-      errors.push('Word and definition are identical');
-    }
-
-    if (entry.definition.length > 20000) {
-      errors.push('Definition is too long');
-    }
-
-    return {
-      isValid: errors.length === 0,
-      errors
-    };
+    if (!entry.word || entry.word.length < 1) errors.push('Word is missing');
+    if (!entry.meaning || entry.meaning.trim().length < 2) errors.push('Definition is too short or missing');
+    if (entry.word === entry.meaning) errors.push('Word and meaning are identical');
+    return { isValid: errors.length === 0, errors };
   }
 }
+
+function stripAncestorPrefix(t) {
+  const m = t.match(ANCESTOR_PREFIX_RE);
+  return m ? t.slice(m[0].length) : t;
+}
+
+function stripVariantPrefix(line) {
+  const m = line.match(/^[| \t]*([\u3000-\u303F\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF\uE000-\uF8FF\u{20000}-\u{2FA1F}]+)?[| \t]*/u);
+  if (!m) return { text: line.trim(), variant: '' };
+  const variant = m[1] || '';
+  let rest = line.substring(m[0].length);
+  rest = rest.replace(/^[| ]+/, '').trim();
+  return { text: rest, variant: (variant || '').trim() };
+}
+
+const PRON_PAREN = /^\(([^)]*)\)\s*/;
 
 module.exports = TextParser;

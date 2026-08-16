@@ -1,5 +1,6 @@
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
+const fs = require('fs');
 const logger = require('../utils/logger');
 const FileUtils = require('../utils/file-utils');
 const DatabaseSchema = require('./schema');
@@ -9,8 +10,8 @@ const EntryValidator = require('../parser/entry-validator');
 
 class DatabaseGenerator {
   constructor() {
-    this.dbPath = path.join(__dirname, '../../../frontend/assets/database/dictionary.db');
-    this.dataDir = path.join(__dirname, '../../../data');
+    this.dbPath = path.join(__dirname, '../../frontend/assets/database/dictionary.db');
+    this.dataDir = path.join(__dirname, '../../data');
     this.schema = new DatabaseSchema();
     this.seeder = new DatabaseSeeder();
     this.parser = new TextParser();
@@ -37,6 +38,7 @@ class DatabaseGenerator {
 
   async connectDatabase() {
     return new Promise((resolve, reject) => {
+      try { if (fs.existsSync(this.dbPath)) fs.unlinkSync(this.dbPath); } catch (e) {}
       const db = new sqlite3.Database(this.dbPath, (err) => {
         if (err) {
           reject(new Error(`Failed to connect to database: ${err.message}`));
@@ -67,13 +69,13 @@ class DatabaseGenerator {
       await logger.info(`Validated entries: ${validEntries.length}/${parsedData.entries.length} valid`);
       
       await this.clearExistingData();
-      
-      const seedingResult = await this.seeder.seedWords(this.db, validEntries);
-      
-      const wordsWithIds = await this.addIdsToEntries(validEntries);
-      
-      await this.seeder.generateSuggestions(this.db, wordsWithIds);
-      
+
+      const seedingResult = await this.seeder.seedAll(this.db, validEntries);
+
+      await this.seeder.seedCompounds(this.db, validEntries);
+
+      await this.seeder.generateRelatedWords(this.db);
+
       await this.seeder.updateSearchIndex(this.db);
       
       if (options.optimize !== false) {
@@ -186,11 +188,10 @@ class DatabaseGenerator {
   async clearExistingData() {
     try {
       await logger.info('Clearing existing database data...');
-      
-      await this.runQuery('DELETE FROM suggestions');
-      await this.runQuery('DELETE FROM search_index');
-      await this.runQuery('DELETE FROM words');
-      
+      const tables = ['related_words', 'compounds', 'search_index', 'processing_log', 'words'];
+      for (const table of tables) {
+        await this.runQuery(`DELETE FROM ${table}`);
+      }
       await logger.info('Existing data cleared');
     } catch (error) {
       await logger.error('Failed to clear existing data', { error: error.message });
@@ -313,7 +314,7 @@ async function main() {
     console.log(`Database path: ${result.databasePath}`);
     console.log(`Total words: ${result.stats.totalWords}`);
     console.log(`Dainamese words: ${result.stats.dainameseWords}`);
-    console.log(`Total suggestions: ${result.stats.totalSuggestions}`);
+    console.log(`Total suggestions: ${result.stats.totalRelations}`);
     console.log(`Average confidence: ${(result.stats.averageConfidence || 0).toFixed(2)}%`);
     console.log(`Success rate: ${result.seedingResult.successRate.toFixed(2)}%`);
     

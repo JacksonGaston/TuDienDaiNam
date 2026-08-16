@@ -122,7 +122,7 @@ const HomeScreen = ({ navigation }) => {
               <Text style={styles.pronunciation}>[{word.pronunciation}]</Text>
             )}
             <Text style={styles.definition} numberOfLines={2}>
-              {word.definition}
+              {word.meaning}
             </Text>
           </TouchableOpacity>
         ))}
