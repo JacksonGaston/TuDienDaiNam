@@ -87,10 +87,6 @@ class EntryValidator {
     if (word.toLowerCase() === word.toLowerCase().replace(/[a-z]/g, '')) {
       result.warnings.push('Word contains no alphabetic characters');
     }
-
-    if (!this.normalizer.isDainameseWord(word) && !/^[a-zA-Z]+$/.test(word)) {
-      result.warnings.push('Word contains mixed character sets');
-    }
   }
 
   validateDefinition(entry, result) {
@@ -208,10 +204,6 @@ class EntryValidator {
 
     confidence -= result.errors.length * 0.3;
     confidence -= result.warnings.length * 0.1;
-
-    if (result.entry.word && this.normalizer.isDainameseWord(result.entry.word)) {
-      confidence += 0.1;
-    }
 
     if (result.entry.definition && result.entry.definition.length > 20) {
       confidence += 0.05;

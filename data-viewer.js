@@ -24,7 +24,6 @@ class DataViewer {
         const stats = {};
         const queries = {
           words: 'SELECT COUNT(*) AS c FROM words',
-          dainamese: 'SELECT COUNT(*) AS c FROM words WHERE is_dainamese = 1',
           compounds: 'SELECT COUNT(*) AS c FROM compounds',
           related_words: 'SELECT COUNT(*) AS c FROM related_words',
           search_index: 'SELECT COUNT(*) AS c FROM search_index',
@@ -54,7 +53,7 @@ class DataViewer {
       const limit = parseInt(req.query.limit) || 20;
       const offset = parseInt(req.query.offset) || 0;
       db.all(
-        `SELECT id, word, pronunciation, word_type, meaning, is_dainamese, text_quality, source_file
+        `SELECT id, word, pronunciation, word_type, meaning, text_quality, source_file
          FROM words ORDER BY word LIMIT ? OFFSET ?`,
         [limit, offset],
         (err, rows) => {
@@ -87,7 +86,7 @@ class DataViewer {
     this.app.get('/api/word/:word', (req, res) => {
       const db = new sqlite3.Database(this.dbPath);
       const word = decodeURIComponent(req.params.word);
-      db.get('SELECT id, word, pronunciation, word_type, meaning, is_dainamese, text_quality, source_file, ancient_char FROM words WHERE word = ?', [word], (err, row) => {
+      db.get('SELECT id, word, pronunciation, word_type, meaning, text_quality, source_file, ancient_char FROM words WHERE word = ?', [word], (err, row) => {
         if (!row) { db.close(); res.status(404).json({ error: 'not found' }); return; }
         db.all('SELECT compound, meaning FROM compounds WHERE word_id = ? ORDER BY id', [row.id], (e2, comps) => {
           db.close();
@@ -140,7 +139,6 @@ class DataViewer {
       const s = await fetch('/api/database-stats').then(r=>r.json());
       document.getElementById('db-stats').innerHTML =
         '<div class="stat-card"><div class="stat-number">'+(s.words||0)+'</div><div class="stat-label">Words</div></div>' +
-        '<div class="stat-card"><div class="stat-number">'+(s.dainamese||0)+'</div><div class="stat-label">Dainamese</div></div>' +
         '<div class="stat-card"><div class="stat-number">'+(s.compounds||0)+'</div><div class="stat-label">Compounds</div></div>' +
         '<div class="stat-card"><div class="stat-number">'+(s.related_words||0)+'</div><div class="stat-label">Related</div></div>' +
         '<div class="stat-card"><div class="stat-number">'+(s.search_index||0)+'</div><div class="stat-label">Search Index</div></div>' +

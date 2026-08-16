@@ -244,7 +244,6 @@ class TextParser {
 
   finalizeEntry(entry) {
     entry.normalizedWord = this.normalizer.normalizeForSearch(entry.word);
-    entry.isDainamese = this.normalizer.isDainameseWord(entry.word);
     entry.searchVariations = this.normalizer.generateSearchVariations(entry.word);
     entry.definition = this.buildDefinition(entry);
     return entry;

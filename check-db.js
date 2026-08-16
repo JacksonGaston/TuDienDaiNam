@@ -12,7 +12,6 @@ db.all(
      (SELECT COUNT(*) FROM compounds) AS compounds,
      (SELECT COUNT(*) FROM related_words) AS related,
      (SELECT COUNT(*) FROM search_index) AS searchIndex,
-     (SELECT COUNT(*) FROM words WHERE is_dainamese = 1) AS dainamese,
      (SELECT ROUND(AVG(text_quality), 4) FROM words) AS avgQuality
    FROM words LIMIT 1`,
   (err, rows) => {
@@ -22,7 +21,6 @@ db.all(
     console.log(`Compounds:    ${r.compounds}`);
     console.log(`Related:      ${r.related}`);
     console.log(`Search index: ${r.searchIndex}`);
-    console.log(`Dainamese:    ${r.dainamese}`);
     console.log(`Avg quality:  ${r.avgQuality}`);
   }
 );

@@ -12,7 +12,6 @@ class DatabaseSchema {
           word_type TEXT,
           meaning TEXT,
           ancient_char TEXT,
-          is_dainamese INTEGER DEFAULT 0,
           source_file TEXT,
           text_quality REAL DEFAULT 1.0,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -64,7 +63,6 @@ class DatabaseSchema {
       word_index: 'CREATE INDEX IF NOT EXISTS idx_word ON words(word)',
       normalized_word_index: 'CREATE INDEX IF NOT EXISTS idx_normalized_word ON words(normalized_word)',
       word_type_index: 'CREATE INDEX IF NOT EXISTS idx_word_type ON words(word_type)',
-      is_dainamese_index: 'CREATE INDEX IF NOT EXISTS idx_is_dainamese ON words(is_dainamese)',
       quality_index: 'CREATE INDEX IF NOT EXISTS idx_text_quality ON words(text_quality)',
       source_file_index: 'CREATE INDEX IF NOT EXISTS idx_source_file ON words(source_file)',
       compounds_word_index: 'CREATE INDEX IF NOT EXISTS idx_compounds_word_id ON compounds(word_id)',

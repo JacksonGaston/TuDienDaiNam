@@ -63,7 +63,7 @@ frontend/
 ## Features
 
 ### Home Screen
-- Displays dictionary statistics (total words, Dainamese words)
+- Displays dictionary statistics (total words)
 - Shows featured random words
 - Quick access to search functionality
 
@@ -84,7 +84,6 @@ frontend/
 - **Fast search**: Uses SQLite FTS5 full-text search
 - **Autocomplete**: Smart suggestions based on similar words
 - **Quality scoring**: Each entry has a text quality score
-- **Dainamese detection**: Identifies Dainamese language words
 
 ## Technical Details
 

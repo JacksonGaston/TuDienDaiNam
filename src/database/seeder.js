@@ -52,8 +52,8 @@ class DatabaseSeeder {
     const insertSQL = `
       INSERT OR IGNORE INTO words (
         word, normalized_word, pronunciation, word_type, meaning,
-        ancient_char, is_dainamese, source_file, text_quality
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ancient_char, source_file, text_quality
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `;
     let successCount = 0;
     const errors = [];
@@ -66,7 +66,7 @@ class DatabaseSeeder {
           try {
             await this.runQuery(db, insertSQL, [
               pe.word, pe.normalizedWord, pe.pronunciation, pe.wordType,
-              pe.meaning, pe.ancientChar, pe.isDainamese ? 1 : 0, pe.sourceFile, pe.textQuality
+              pe.meaning, pe.ancientChar, pe.sourceFile, pe.textQuality
             ]);
             successCount++;
           } catch (error) {
@@ -97,7 +97,6 @@ class DatabaseSeeder {
       wordType: entry.wordType || '',
       meaning: entry.meaning || '',
       ancientChar: entry.ancientChar || '',
-      isDainamese: entry.isDainamese || this.normalizer.isDainameseWord(entry.word || ''),
       sourceFile: entry.sourceFile || '',
       textQuality: entry.textQuality || 1.0
     };
@@ -285,20 +284,18 @@ class DatabaseSeeder {
       const wordCount = await this.getQuery(db, 'SELECT COUNT(*) as count FROM words');
       const compoundCount = await this.getQuery(db, 'SELECT COUNT(*) as count FROM compounds');
       const relatedCount = await this.getQuery(db, 'SELECT COUNT(*) as count FROM related_words');
-      const dainameseCount = await this.getQuery(db, 'SELECT COUNT(*) as count FROM words WHERE is_dainamese = 1');
       const avgQuality = await this.getQuery(db, 'SELECT AVG(text_quality) as avg_quality FROM words');
       return {
         totalWords: wordCount ? wordCount.count : 0,
         totalCompounds: compoundCount ? compoundCount.count : 0,
         totalRelations: relatedCount ? relatedCount.count : 0,
-        dainameseWords: dainameseCount ? dainameseCount.count : 0,
         averageConfidence: avgQuality ? (avgQuality.avg_quality || 0) * 100 : 0,
         timestamp: new Date().toISOString()
       };
     } catch (error) {
       await logger.error('Failed to get seeding stats', { error: error.message });
       return {
-        totalWords: 0, totalCompounds: 0, totalRelations: 0, dainameseWords: 0,
+        totalWords: 0, totalCompounds: 0, totalRelations: 0,
         averageConfidence: 0, timestamp: new Date().toISOString()
       };
     }

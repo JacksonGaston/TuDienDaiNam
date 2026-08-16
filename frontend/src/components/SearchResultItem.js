@@ -19,11 +19,6 @@ const SearchResultItem = ({ word, onPress }) => {
       <View style={styles.content}>
         <View style={styles.header}>
           <Text style={styles.word}>{word.word}</Text>
-          {word.isDainamese && (
-            <View style={styles.dainameseBadge}>
-              <Text style={styles.dainameseText}>Dainamese</Text>
-            </View>
-          )}
         </View>
         
         {word.pronunciation && (
@@ -81,18 +76,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#333',
     flex: 1,
-  },
-  dainameseBadge: {
-    backgroundColor: '#2196F3',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
-    marginLeft: 8,
-  },
-  dainameseText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '500',
   },
   pronunciation: {
     fontSize: 14,

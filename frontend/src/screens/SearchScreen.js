@@ -87,8 +87,8 @@ const SearchScreen = ({ navigation }) => {
     </TouchableOpacity>
   );
 
-  const renderCompound = ({ item, index }) => (
-    <View style={styles.compoundItem} key={index}>
+  const renderCompound = ({ item }) => (
+    <View style={styles.compoundItem}>
       <Text style={styles.compoundText}>{item.compound}</Text>
       {item.meaning ? <Text style={styles.compoundMeaning}> — {item.meaning}</Text> : null}
     </View>
@@ -150,11 +150,6 @@ const SearchScreen = ({ navigation }) => {
           >
             <View style={styles.matchHeader}>
               <Text style={styles.matchWord}>{match.word}</Text>
-              {match.isDainamese && (
-                <View style={styles.dainameseBadge}>
-                  <Text style={styles.dainameseText}>Dainamese</Text>
-                </View>
-              )}
             </View>
             {match.pronunciation ? (
               <Text style={styles.matchPronunciation}>[{match.pronunciation}]</Text>
@@ -257,8 +252,6 @@ const styles = StyleSheet.create({
   matchDetailHint: { marginTop: 12, fontSize: 14, color: '#007AFF', fontWeight: '600' },
   matchHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
   matchWord: { fontSize: 32, fontWeight: '700', color: '#212529', flex: 1 },
-  dainameseBadge: { backgroundColor: '#2196F3', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 6 },
-  dainameseText: { color: '#fff', fontSize: 14, fontWeight: '600' },
   matchPronunciation: { fontSize: 18, color: '#6c757d', fontStyle: 'italic', marginBottom: 4 },
   matchType: { fontSize: 16, color: '#6c757d', marginBottom: 8 },
   matchMeaning: { fontSize: 16, lineHeight: 24, color: '#212549', marginBottom: 12 },

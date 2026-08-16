@@ -38,11 +38,7 @@ const DIACRITIC_MAP = {
 };
 
 class DainameseNormalizer {
-  constructor() {
-    this.dainameseRegex = new RegExp(
-      '[áàảãạăắằẳẵặâấầẩẫậđèéẻẽẹêếềểễệíỉịĩóòỏõọôồổỗộơớờởỡợúùủũụưứừửữựýỳỷỹỵÁÀẢÃẠĂẮẰẲẴẶÂẤẦẨẪẬĐÈÉẺẼẸÊẾỀỂỄỆÍỈĨÕÔỒỔỖỘƠỜỞỠỢÚÙỦŨỤƯỨỪỬỮỰÝỲỶỸỴ]'
-    );
-  }
+  constructor() {}
 
   normalizeText(text) {
     try {
@@ -99,20 +95,6 @@ class DainameseNormalizer {
       logger.error('Word extraction failed', { error: error.message });
       return [];
     }
-  }
-
-  isDainameseWord(word) {
-    if (!word || typeof word !== 'string') {
-      return false;
-    }
-    if (this.dainameseRegex.test(word)) {
-      return true;
-    }
-    return false;
-  }
-
-  isVietnameseWord(word) {
-    return this.isDainameseWord(word);
   }
 
   generateSearchVariations(word) {

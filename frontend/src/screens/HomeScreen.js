@@ -26,12 +26,10 @@ const HomeScreen = ({ navigation }) => {
       await dictionaryService.initialize();
 
       const wordCount = await dictionaryService.getWordCount();
-      const dainameseCount = await dictionaryService.getDainameseWordCount();
       const randomWordsData = await dictionaryService.getRandomWords(5);
 
       setStats({
         totalWords: wordCount,
-        dainameseWords: dainameseCount,
       });
       setRandomWords(randomWordsData);
     } catch (error) {
@@ -88,10 +86,6 @@ const HomeScreen = ({ navigation }) => {
             <Text style={styles.statNumber}>{stats?.totalWords || 0}</Text>
             <Text style={styles.statLabel}>Total Words</Text>
           </View>
-          <View style={styles.statItem}>
-            <Text style={styles.statNumber}>{stats?.dainameseWords || 0}</Text>
-            <Text style={styles.statLabel}>Dainamese Words</Text>
-          </View>
         </View>
       </View>
 
@@ -112,11 +106,6 @@ const HomeScreen = ({ navigation }) => {
           >
             <View style={styles.wordHeader}>
               <Text style={styles.wordText}>{word.word}</Text>
-              {word.isDainamese && (
-                <View style={styles.dainameseBadge}>
-                  <Text style={styles.dainameseText}>Dainamese</Text>
-                </View>
-              )}
             </View>
             {word.pronunciation && (
               <Text style={styles.pronunciation}>[{word.pronunciation}]</Text>
@@ -261,18 +250,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#212529',
     flex: 1,
-  },
-  dainameseBadge: {
-    backgroundColor: '#2196F3',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
-    marginLeft: 8,
-  },
-  dainameseText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '500',
   },
   pronunciation: {
     fontSize: 14,

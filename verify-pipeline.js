@@ -75,7 +75,6 @@ class PipelineVerifier {
       parsedData.entries.slice(0, 10).forEach((entry, index) => {
         console.log(`  ${index + 1}. Word: "${entry.word}"`);
         console.log(`     Normalized: "${entry.normalizedWord}"`);
-        console.log(`     Is Dainamese: ${entry.isDainamese ? 'yes' : 'no'}`);
         console.log(`     Word Type: "${entry.wordType || 'N/A'}"`);
         console.log(`     Meaning: "${(entry.meaning || '').slice(0, 100)}"`);
         console.log(`     Ancient char: "${entry.ancientChar}"`);
@@ -123,7 +122,6 @@ class PipelineVerifier {
       console.log('Database connected successfully\n');
       const countQueries = [
         ['words', 'SELECT COUNT(*) AS c FROM words'],
-        ['dainamese', 'SELECT COUNT(*) AS c FROM words WHERE is_dainamese = 1'],
         ['compounds', 'SELECT COUNT(*) AS c FROM compounds'],
         ['related_words', 'SELECT COUNT(*) AS c FROM related_words'],
         ['search_index', 'SELECT COUNT(*) AS c FROM search_index'],
@@ -149,7 +147,6 @@ class PipelineVerifier {
   displayDatabaseStats(results) {
     console.log('Database Statistics:');
     console.log(`   Total Words: ${results.words || 0}`);
-    console.log(`   Dainamese Words: ${results.dainamese || 0}`);
     console.log(`   Compounds: ${results.compounds || 0}`);
     console.log(`   Related Words: ${results.related_words || 0}`);
     console.log(`   Search Index Entries: ${results.search_index || 0}`);
@@ -158,11 +155,11 @@ class PipelineVerifier {
 
   displaySampleEntries(db) {
     console.log('\nSample Database Entries:');
-    db.all('SELECT word, pronunciation, word_type, meaning, is_dainamese, text_quality, ancient_char FROM words LIMIT 10', (err, rows) => {
+    db.all('SELECT word, pronunciation, word_type, meaning, text_quality, ancient_char FROM words LIMIT 10', (err, rows) => {
       if (err) { console.error('Error fetching sample entries:', err.message); return; }
       rows.forEach((row, index) => {
         console.log(`  ${index + 1}. "${row.word}" (${row.word_type || '?'})`);
-        console.log(`     Dainamese: ${row.is_dainamese ? 'yes' : 'no'} | Pron: ${row.pronunciation || 'N/A'}`);
+        console.log(`     Pron: ${row.pronunciation || 'N/A'}`);
         console.log(`     Meaning: ${(row.meaning || '').substring(0, 90)}`);
       });
     });

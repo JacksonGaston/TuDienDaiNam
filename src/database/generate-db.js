@@ -90,7 +90,6 @@ class DatabaseGenerator {
         stats = {
           totalWords: 0,
           totalSuggestions: 0,
-          dainameseWords: 0,
           averageConfidence: 0
         };
       }
@@ -313,7 +312,6 @@ async function main() {
     console.log('\n=== DATABASE GENERATION COMPLETE ===');
     console.log(`Database path: ${result.databasePath}`);
     console.log(`Total words: ${result.stats.totalWords}`);
-    console.log(`Dainamese words: ${result.stats.dainameseWords}`);
     console.log(`Total suggestions: ${result.stats.totalRelations}`);
     console.log(`Average confidence: ${(result.stats.averageConfidence || 0).toFixed(2)}%`);
     console.log(`Success rate: ${result.seedingResult.successRate.toFixed(2)}%`);

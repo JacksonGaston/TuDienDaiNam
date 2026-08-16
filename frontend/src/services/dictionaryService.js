@@ -70,6 +70,30 @@ function levenshtein(a, b) {
   return prev[n];
 }
 
+const WORD_COLUMNS = 'id, word, pronunciation, word_type AS wordType, meaning, ancient_char AS ancientChar, source_file AS sourceFile, text_quality AS textQuality';
+
+function rankByQuery(q) {
+  const lower = (q || '').toLowerCase();
+  return (a, b) => {
+    const aExact = (a.word || '').toLowerCase() === lower ? 0 : 1;
+    const bExact = (b.word || '').toLowerCase() === lower ? 0 : 1;
+    if (aExact !== bExact) return aExact - bExact;
+    return (a.word || '').localeCompare(b.word || '');
+  };
+}
+
+function dedupeById(items) {
+  const seen = new Set();
+  const result = [];
+  for (const item of items) {
+    if (item && item.id != null && !seen.has(item.id)) {
+      seen.add(item.id);
+      result.push(item);
+    }
+  }
+  return result;
+}
+
 class DictionaryService {
   constructor() {
     this.db = null;
@@ -99,17 +123,18 @@ class DictionaryService {
     const q = (query || '').trim();
     if (!q) return { match: null, suggestions: [], notFound: true };
 
-    const exact = await this.executeGet(
-      'SELECT id, word, pronunciation, word_type AS wordType, meaning, ancient_char AS ancientChar, is_dainamese AS isDainamese, source_file AS sourceFile, text_quality AS textQuality FROM words WHERE word = ?',
-      [q]
-    );
-
-    let match = exact ? this.mapWord(exact) : null;
+    let match = null;
     let suggestions = [];
 
-    if (match) {
-      suggestions = await this.getRelatedWords(match.id, 3);
-    } else {
+    if (!match) {
+      const exact = await this.findExactWord(q);
+      match = exact ? this.mapWord(exact) : null;
+      if (match) {
+        suggestions = await this.getRelatedWords(match.id, 3);
+      }
+    }
+
+    if (!match) {
       const normQ = normalizeForSearch(q);
       if (normQ) {
         const normRows = await this.executeSelect(
@@ -117,11 +142,13 @@ class DictionaryService {
           [normQ]
         );
         if (normRows.length > 0) {
+          normRows.sort(rankByQuery(q));
           match = this.mapWord(normRows[0]);
           suggestions = normRows.slice(1, 4).map(r => this.mapSuggestion(r));
           const remaining = 3 - suggestions.length;
           if (remaining > 0) {
-            suggestions.push(...(await this.getRelatedWords(match.id, remaining).then(rs => rs.map(this.mapSuggestion))));
+            const related = await this.getRelatedWords(match.id, remaining);
+            suggestions.push(...related.map(r => this.mapSuggestion(r)));
           }
         } else {
           const prefixRows = await this.executeSelect(
@@ -144,11 +171,25 @@ class DictionaryService {
       }
     }
 
+    suggestions = dedupeById(suggestions);
+
     if (match) {
       match.compounds = await this.getCompounds(match.id);
     }
 
     return { match, suggestions, notFound: !match };
+  }
+
+  async findExactWord(q) {
+    const exact = await this.executeGet(
+      `SELECT ${WORD_COLUMNS} FROM words WHERE word = ?`,
+      [q]
+    );
+    if (exact) return exact;
+    return this.executeGet(
+      `SELECT ${WORD_COLUMNS} FROM words WHERE word = ? COLLATE NOCASE`,
+      [q]
+    );
   }
 
   async getRelatedWords(wordId, limit = 3) {
@@ -179,7 +220,6 @@ class DictionaryService {
       wordType: row.wordType || '',
       meaning: row.meaning || '',
       ancientChar: row.ancientChar || '',
-      isDainamese: Boolean(row.isDainamese),
       sourceFile: row.sourceFile || '',
       textQuality: row.textQuality != null ? row.textQuality : 1.0
     } : null;
@@ -196,7 +236,7 @@ class DictionaryService {
 
   async getWordById(wordId) {
     const row = await this.executeGet(
-      'SELECT id, word, pronunciation, word_type AS wordType, meaning, ancient_char AS ancientChar, is_dainamese AS isDainamese, source_file AS sourceFile, text_quality AS textQuality FROM words WHERE id = ?',
+      `SELECT ${WORD_COLUMNS} FROM words WHERE id = ?`,
       [wordId]
     );
     if (!row) return null;
@@ -208,7 +248,7 @@ class DictionaryService {
   async getWordByWord(word) {
     if (!word) return null;
     const row = await this.executeGet(
-      'SELECT id, word, pronunciation, word_type AS wordType, meaning, ancient_char AS ancientChar, is_dainamese AS isDainamese, source_file AS sourceFile, text_quality AS textQuality FROM words WHERE word = ?',
+      `SELECT ${WORD_COLUMNS} FROM words WHERE word = ?`,
       [word]
     );
     if (!row) return null;
@@ -225,16 +265,17 @@ class DictionaryService {
     if (normQ) {
       rows = await this.executeSelect(
         'SELECT id, word, word_type AS wordType, meaning FROM words WHERE normalized_word LIKE ? ORDER BY word LIMIT ?',
-        [normQ + '%', limit]
+        [normQ + '%', Math.max(limit, 32)]
       );
     }
     if (rows.length === 0) {
       rows = await this.executeSelect(
         'SELECT id, word, word_type AS wordType, meaning FROM words WHERE word LIKE ? ESCAPE "\\" ORDER BY word LIMIT ?',
-        [q.replace(/[\\%_]/g, '\\$&') + '%', limit]
+        [q.replace(/[\\%_]/g, '\\$&') + '%', Math.max(limit, 32)]
       );
     }
-    return rows.map(r => this.mapSuggestion(r));
+    rows.sort(rankByQuery(q));
+    return rows.slice(0, limit).map(r => this.mapSuggestion(r));
   }
 
   async getRandomWords(limit = 10) {
@@ -247,11 +288,6 @@ class DictionaryService {
 
   async getWordCount() {
     const result = await this.executeGet('SELECT COUNT(*) as count FROM words');
-    return result ? result.count : 0;
-  }
-
-  async getDainameseWordCount() {
-    const result = await this.executeGet('SELECT COUNT(*) as count FROM words WHERE is_dainamese = 1');
     return result ? result.count : 0;
   }
 

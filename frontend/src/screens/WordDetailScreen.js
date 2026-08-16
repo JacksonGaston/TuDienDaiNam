@@ -85,11 +85,6 @@ const WordDetailScreen = ({ route, navigation }) => {
       <View style={styles.header}>
         <View style={styles.wordHeader}>
           <Text style={styles.word}>{currentWord.word}</Text>
-          {currentWord.isDainamese && (
-            <View style={styles.dainameseBadge}>
-              <Text style={styles.dainameseText}>Dainamese</Text>
-            </View>
-          )}
         </View>
         
         {currentWord.pronunciation && (
@@ -223,18 +218,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#212529',
     flex: 1,
-  },
-  dainameseBadge: {
-    backgroundColor: '#2196F3',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 6,
-    marginLeft: 12,
-  },
-  dainameseText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
   },
   pronunciation: {
     fontSize: 18,
