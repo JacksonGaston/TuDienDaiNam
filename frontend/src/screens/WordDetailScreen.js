@@ -9,10 +9,12 @@ import {
 } from 'react-native';
 import { useDispatch, useSelector } from 'react-redux';
 import { getWordDetails } from '../store/dictionarySlice';
+import { useTranslation } from '../i18n/LanguageContext';
 
 const WordDetailScreen = ({ route, navigation }) => {
   const { wordId } = route.params;
   const dispatch = useDispatch();
+  const { t } = useTranslation();
   const { currentWord, isLoading, error } = useSelector(
     (state) => state.dictionary
   );
@@ -38,13 +40,13 @@ const WordDetailScreen = ({ route, navigation }) => {
   };
 
   const getQualityText = (quality) => {
-    if (quality >= 0.8) return 'High';
-    if (quality >= 0.5) return 'Medium';
-    return 'Low';
+    if (quality >= 0.8) return t('high');
+    if (quality >= 0.5) return t('medium');
+    return t('low');
   };
 
   const formatDate = (dateString) => {
-    if (!dateString) return 'N/A';
+    if (!dateString) return t('na');
     const date = new Date(dateString);
     return date.toLocaleDateString();
   };
@@ -53,7 +55,7 @@ const WordDetailScreen = ({ route, navigation }) => {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#007AFF" />
-        <Text style={styles.loadingText}>Loading word details...</Text>
+        <Text style={styles.loadingText}>{t('loadingWordDetails')}</Text>
       </View>
     );
   }
@@ -61,12 +63,12 @@ const WordDetailScreen = ({ route, navigation }) => {
   if (error) {
     return (
       <View style={styles.centered}>
-        <Text style={styles.errorText}>Error: {error}</Text>
+        <Text style={styles.errorText}>{t('error', { error })}</Text>
         <TouchableOpacity
           style={styles.retryButton}
           onPress={() => dispatch(getWordDetails(wordId))}
         >
-          <Text style={styles.retryButtonText}>Retry</Text>
+          <Text style={styles.retryButtonText}>{t('retry')}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -75,7 +77,7 @@ const WordDetailScreen = ({ route, navigation }) => {
   if (!currentWord) {
     return (
       <View style={styles.centered}>
-        <Text style={styles.notFoundText}>Word not found</Text>
+        <Text style={styles.notFoundText}>{t('wordNotFound')}</Text>
       </View>
     );
   }
@@ -86,24 +88,24 @@ const WordDetailScreen = ({ route, navigation }) => {
         <View style={styles.wordHeader}>
           <Text style={styles.word}>{currentWord.word}</Text>
         </View>
-        
+
         {currentWord.pronunciation && (
           <Text style={styles.pronunciation}>[{currentWord.pronunciation}]</Text>
         )}
-        
+
         {currentWord.wordType && (
           <Text style={styles.wordType}>({currentWord.wordType})</Text>
         )}
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Meaning</Text>
+        <Text style={styles.sectionTitle}>{t('meaning')}</Text>
         <Text style={styles.definition}>{currentWord.meaning}</Text>
       </View>
 
       {currentWord.compounds && currentWord.compounds.length > 0 && (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Compounds</Text>
+          <Text style={styles.sectionTitle}>{t('compounds')}</Text>
           {currentWord.compounds.map((item, index) => (
             <View key={index} style={styles.exampleItem}>
               <Text style={styles.compoundText}>{item.compound}</Text>
@@ -115,7 +117,7 @@ const WordDetailScreen = ({ route, navigation }) => {
 
       {currentWord.examples && currentWord.examples.length > 0 && (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Examples</Text>
+          <Text style={styles.sectionTitle}>{t('examples')}</Text>
           {currentWord.examples.map((example, index) => (
             <View key={index} style={styles.exampleItem}>
               <Text style={styles.exampleText}>{example}</Text>
@@ -125,16 +127,16 @@ const WordDetailScreen = ({ route, navigation }) => {
       )}
 
       <View style={styles.metadataSection}>
-        <Text style={styles.sectionTitle}>Metadata</Text>
-        
+        <Text style={styles.sectionTitle}>{t('metadata')}</Text>
+
         <View style={styles.metadataRow}>
-          <Text style={styles.metadataLabel}>Text Quality:</Text>
+          <Text style={styles.metadataLabel}>{t('textQuality')}</Text>
           <View style={styles.qualityContainer}>
-            <View 
+            <View
               style={[
-                styles.qualityDot, 
+                styles.qualityDot,
                 { backgroundColor: getQualityColor(currentWord.textQuality) }
-              ]} 
+              ]}
             />
             <Text style={styles.metadataValue}>
               {getQualityText(currentWord.textQuality)} ({(currentWord.textQuality * 100).toFixed(1)}%)
@@ -144,18 +146,18 @@ const WordDetailScreen = ({ route, navigation }) => {
 
         {currentWord.sourceFile && (
           <View style={styles.metadataRow}>
-            <Text style={styles.metadataLabel}>Source File:</Text>
+            <Text style={styles.metadataLabel}>{t('sourceFile')}</Text>
             <Text style={styles.metadataValue}>{currentWord.sourceFile}</Text>
           </View>
         )}
 
         <View style={styles.metadataRow}>
-          <Text style={styles.metadataLabel}>Created:</Text>
+          <Text style={styles.metadataLabel}>{t('created')}</Text>
           <Text style={styles.metadataValue}>{formatDate(currentWord.createdAt)}</Text>
         </View>
 
         <View style={styles.metadataRow}>
-          <Text style={styles.metadataLabel}>Updated:</Text>
+          <Text style={styles.metadataLabel}>{t('updated')}</Text>
           <Text style={styles.metadataValue}>{formatDate(currentWord.updatedAt)}</Text>
         </View>
       </View>

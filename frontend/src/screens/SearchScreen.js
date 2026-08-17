@@ -12,12 +12,14 @@ import {
 } from 'react-native';
 import { useDispatch, useSelector } from 'react-redux';
 import { searchWord, getSuggestions, addToHistory } from '../store/dictionarySlice';
+import { useTranslation } from '../i18n/LanguageContext';
 
 const SearchScreen = ({ navigation }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [showAutocomplete, setShowAutocomplete] = useState(false);
   const submittedRef = useRef(null);
+  const { t } = useTranslation();
 
   const dispatch = useDispatch();
   const { searchResult, suggestions, isLoading } = useSelector(
@@ -109,7 +111,7 @@ const SearchScreen = ({ navigation }) => {
       <View style={styles.searchContainer}>
         <TextInput
           style={styles.searchInput}
-          placeholder="Search a word (e.g. Ái)..."
+          placeholder={t('searchPlaceholder')}
           value={searchQuery}
           onChangeText={handleChangeText}
           onSubmitEditing={handleSearch}
@@ -125,7 +127,7 @@ const SearchScreen = ({ navigation }) => {
           {isLoading ? (
             <ActivityIndicator size="small" color="#fff" />
           ) : (
-            <Text style={styles.searchButtonText}>Search</Text>
+            <Text style={styles.searchButtonText}>{t('search')}</Text>
           )}
         </TouchableOpacity>
       </View>
@@ -158,7 +160,7 @@ const SearchScreen = ({ navigation }) => {
             <Text style={styles.matchMeaning}>{match.meaning}</Text>
             {match.compounds && match.compounds.length > 0 && (
               <View style={styles.compoundsSection}>
-                <Text style={styles.sectionTitle}>Compounds</Text>
+                <Text style={styles.sectionTitle}>{t('compounds')}</Text>
                 <FlatList
                   data={match.compounds}
                   renderItem={renderCompound}
@@ -167,12 +169,12 @@ const SearchScreen = ({ navigation }) => {
                 />
               </View>
             )}
-            <Text style={styles.matchDetailHint}>Tap for full entry ›</Text>
+            <Text style={styles.matchDetailHint}>{t('tapForFullEntry')}</Text>
           </TouchableOpacity>
 
           {searchResult.suggestions && searchResult.suggestions.length > 0 && (
             <View style={styles.relatedSection}>
-              <Text style={styles.sectionTitle}>Related words</Text>
+              <Text style={styles.sectionTitle}>{t('relatedWords')}</Text>
               <FlatList
                 data={searchResult.suggestions}
                 renderItem={renderRelatedItem}
@@ -187,10 +189,10 @@ const SearchScreen = ({ navigation }) => {
 
       {!showAutocomplete && notFound && searchQuery.length > 0 && (
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>No entry found for "{searchQuery}"</Text>
+          <Text style={styles.emptyText}>{t('noEntryFound', { query: searchQuery })}</Text>
           {searchResult.suggestions && searchResult.suggestions.length > 0 && (
             <>
-              <Text style={styles.emptySub}>Did you mean:</Text>
+              <Text style={styles.emptySub}>{t('didYouMean')}</Text>
               <FlatList
                 data={searchResult.suggestions}
                 renderItem={renderRelatedItem}
@@ -203,7 +205,7 @@ const SearchScreen = ({ navigation }) => {
 
       {!showAutocomplete && !match && !notFound && searchQuery.length === 0 && (
         <View style={styles.hintContainer}>
-          <Text style={styles.hintText}>Enter a Dainamese word and tap Search.</Text>
+          <Text style={styles.hintText}>{t('enterDainameseWord')}</Text>
         </View>
       )}
     </View>

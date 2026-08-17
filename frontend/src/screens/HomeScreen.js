@@ -8,12 +8,14 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { dictionaryService } from '../services/dictionaryService';
+import { useTranslation } from '../i18n/LanguageContext';
 
 const HomeScreen = ({ navigation }) => {
   const [stats, setStats] = useState(null);
   const [randomWords, setRandomWords] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const { t, language, setLanguage } = useTranslation();
 
   useEffect(() => {
     loadData();
@@ -34,7 +36,7 @@ const HomeScreen = ({ navigation }) => {
       setRandomWords(randomWordsData);
     } catch (error) {
       console.error('Error loading data:', error);
-      setError('Failed to load dictionary database. Please restart the app.');
+      setError(t('failedToLoad'));
     } finally {
       setIsLoading(false);
     }
@@ -48,11 +50,15 @@ const HomeScreen = ({ navigation }) => {
     navigation.navigate('Search');
   };
 
+  const toggleLanguage = () => {
+    setLanguage(language === 'en' ? 'dainamese' : 'en');
+  };
+
   if (isLoading) {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#007AFF" />
-        <Text style={styles.loadingText}>Loading dictionary...</Text>
+        <Text style={styles.loadingText}>{t('loadingDictionary')}</Text>
       </View>
     );
   }
@@ -60,13 +66,13 @@ const HomeScreen = ({ navigation }) => {
   if (error) {
     return (
       <View style={styles.errorContainer}>
-        <Text style={styles.errorTitle}>Database Error</Text>
+        <Text style={styles.errorTitle}>{t('databaseError')}</Text>
         <Text style={styles.errorText}>{error}</Text>
         <TouchableOpacity
           style={styles.retryButton}
           onPress={loadData}
         >
-          <Text style={styles.retryButtonText}>Retry</Text>
+          <Text style={styles.retryButtonText}>{t('retry')}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -75,16 +81,21 @@ const HomeScreen = ({ navigation }) => {
   return (
     <ScrollView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>TuDienDaiNam</Text>
-        <Text style={styles.subtitle}>Offline Dainamese Dictionary</Text>
+        <Text style={styles.title}>{t('appName')}</Text>
+        <Text style={styles.subtitle}>{t('offlineDainameseDictionary')}</Text>
+        <TouchableOpacity onPress={toggleLanguage} style={styles.langToggle}>
+          <Text style={styles.langToggleText}>
+            {language === 'en' ? 'DN' : 'EN'}
+          </Text>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.statsContainer}>
-        <Text style={styles.statsTitle}>Dictionary Statistics</Text>
+        <Text style={styles.statsTitle}>{t('dictionaryStatistics')}</Text>
         <View style={styles.statsRow}>
           <View style={styles.statItem}>
             <Text style={styles.statNumber}>{stats?.totalWords || 0}</Text>
-            <Text style={styles.statLabel}>Total Words</Text>
+            <Text style={styles.statLabel}>{t('totalWords')}</Text>
           </View>
         </View>
       </View>
@@ -93,11 +104,11 @@ const HomeScreen = ({ navigation }) => {
         style={styles.searchButton}
         onPress={handleSearchPress}
       >
-        <Text style={styles.searchButtonText}>Search Dictionary</Text>
+        <Text style={styles.searchButtonText}>{t('searchDictionaryButton')}</Text>
       </TouchableOpacity>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Featured Words</Text>
+        <Text style={styles.sectionTitle}>{t('featuredWords')}</Text>
         {randomWords.map((word) => (
           <TouchableOpacity
             key={word.id}
@@ -118,13 +129,15 @@ const HomeScreen = ({ navigation }) => {
       </View>
 
       <View style={styles.infoSection}>
-        <Text style={styles.infoTitle}>About This App</Text>
+        <Text style={styles.infoTitle}>{t('aboutThisApp')}</Text>
         <Text style={styles.infoText}>
-          TuDienDaiNam is a fully offline dictionary application for the Dainamese language. 
-          All dictionary data is stored locally on your device, requiring no internet connection.
+          {t('aboutDescription')}
         </Text>
         <Text style={styles.infoText}>
-          Search for words, view detailed definitions, and explore the rich vocabulary of Dainamese.
+          {t('aboutSource')}
+        </Text>
+        <Text style={styles.infoText}>
+          {t('aboutDescription2')}
         </Text>
       </View>
     </ScrollView>
@@ -161,6 +174,18 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 16,
     color: 'rgba(255, 255, 255, 0.9)',
+    marginBottom: 8,
+  },
+  langToggle: {
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+  langToggleText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
   },
   statsContainer: {
     backgroundColor: '#fff',

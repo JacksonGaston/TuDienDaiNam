@@ -1,7 +1,10 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { useTranslation } from '../i18n/LanguageContext';
 
 const SearchResultItem = ({ word, onPress }) => {
+  const { t } = useTranslation();
+
   const getQualityColor = (quality) => {
     if (quality >= 0.8) return '#4CAF50';
     if (quality >= 0.5) return '#FF9800';
@@ -9,9 +12,9 @@ const SearchResultItem = ({ word, onPress }) => {
   };
 
   const getQualityText = (quality) => {
-    if (quality >= 0.8) return 'High';
-    if (quality >= 0.5) return 'Medium';
-    return 'Low';
+    if (quality >= 0.8) return t('high');
+    if (quality >= 0.5) return t('medium');
+    return t('low');
   };
 
   return (
@@ -20,35 +23,35 @@ const SearchResultItem = ({ word, onPress }) => {
         <View style={styles.header}>
           <Text style={styles.word}>{word.word}</Text>
         </View>
-        
+
         {word.pronunciation && (
           <Text style={styles.pronunciation}>[{word.pronunciation}]</Text>
         )}
-        
+
         {word.wordType && (
           <Text style={styles.wordType}>({word.wordType})</Text>
         )}
-        
+
         <Text style={styles.definition} numberOfLines={2}>
           {word.definition}
         </Text>
-        
+
         <View style={styles.footer}>
           <View style={styles.qualityContainer}>
-            <View 
+            <View
               style={[
-                styles.qualityDot, 
+                styles.qualityDot,
                 { backgroundColor: getQualityColor(word.textQuality) }
-              ]} 
+              ]}
             />
             <Text style={styles.qualityText}>
-              {getQualityText(word.textQuality)} quality
+              {t('qualityLevel', { quality: getQualityText(word.textQuality) })}
             </Text>
           </View>
-          
+
           {word.searchRank && (
             <Text style={styles.rankText}>
-              Rank: {word.searchRank.toFixed(2)}
+              {t('rank', { value: word.searchRank.toFixed(2) })}
             </Text>
           )}
         </View>

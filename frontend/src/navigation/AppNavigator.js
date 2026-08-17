@@ -1,5 +1,6 @@
 import React from 'react';
 import { createStackNavigator } from '@react-navigation/stack';
+import { useTranslation } from '../i18n/LanguageContext';
 import HomeScreen from '../screens/HomeScreen';
 import SearchScreen from '../screens/SearchScreen';
 import WordDetailScreen from '../screens/WordDetailScreen';
@@ -7,6 +8,8 @@ import WordDetailScreen from '../screens/WordDetailScreen';
 const Stack = createStackNavigator();
 
 const AppNavigator = () => {
+  const { t } = useTranslation();
+
   return (
     <Stack.Navigator
       initialRouteName="Home"
@@ -25,7 +28,7 @@ const AppNavigator = () => {
         name="Home"
         component={HomeScreen}
         options={{
-          title: 'TuDienDaiNam',
+          title: t('appName'),
           headerShown: false,
         }}
       />
@@ -33,14 +36,14 @@ const AppNavigator = () => {
         name="Search"
         component={SearchScreen}
         options={{
-          title: 'Search Dictionary',
+          title: t('searchDictionary'),
         }}
       />
       <Stack.Screen
         name="WordDetail"
         component={WordDetailScreen}
         options={{
-          title: 'Word Details',
+          title: t('wordDetails'),
         }}
       />
     </Stack.Navigator>
