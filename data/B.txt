@@ -35,7 +35,6 @@
 把	Bạ. n. Gởi nhờ không chắc chắn; tấp vào ; dật lạc.
  Ở ―. Ở gởi nhờ.
  Tụ ―. Nhóm họp qua vậy. Quân hoang tụ bạ.
-
  Bậy —. Lộn lạo, không thứ lớp.
  Bật —. Bỏ vấy vá, rãi rác. Nằm bật bạ thì là đụng đâu nằm đó.
  — vào. Dật lạc vào. Thây ma bạ vào mép rạch. Chùm gởi đóng bạ cây dâu.
@@ -1272,8 +1271,6 @@
  Lỗ ―.  Khuấy rối, làm hại Đồ lỗ báo thì là đồ làm hại.
  ― hại.  id.
  Nó ― tôi to quá.  Nó khuấy tôi lớn quá.
-
-
 春 祈 秋 報  Xuân kỳ thu ―. Lệ làng mùa xuân thì cầu an, mùa thu thì lo tạ ơn. (Thường biểu về sự làm mùa)
  Gia ―.  Làm hại, khuấy trong nhà Tiếng nói đồ gia báo, thì là tiếng mắng tôi, con làm hại trong nhà. Tiếng nói gia báo, gia hại cũng về một nghĩa
  Ác tai ác ―.  Dữ có dữ trả Làm dữ thì gặp dữ.
@@ -1602,7 +1599,6 @@
 
 
 保	Bàu. c. Cử đặt, giữ gìn.
-
  ― cử. Cử đặt (chức việc làng).
  ― đặt. id.
  ― chữa. Cứu giúp, che chở.
@@ -1743,9 +1739,7 @@
 
 
 陛	Bệ. c. Ván lót có cấp để mà ngồi, để mà bước.
- ― hạ. Dưới bệ Tiếng xưng hô trong khi
-
-tâu đối, không dám nói tới vua, chỉ dưới bệ mà kêu.
+ ― hạ. Dưới bệ Tiếng xưng hô trong khi tâu đối, không dám nói tới vua, chỉ dưới bệ mà kêu.
  ― tiên. Trước mặt hoàng đế.
  ― rồng. Bệ vua ngự, có chạm rồng.
  ― đơn. id.
@@ -3190,7 +3184,6 @@ tâu đối, không dám nói tới vua, chỉ dưới bệ mà kêu.
 
 
 彼	Bở. n. Hay đứt, hay rã, không bền Tiếng nói về hàng giẻ(?), dây chạc, cũng có nghĩa là mục mà bở.
-
  ― rệt.  Bở lắm.
  Vải ―.  Vải không chắc, không bền.
  Hàng ―.  Hàng lụa không bền.
@@ -3484,11 +3477,7 @@ tâu đối, không dám nói tới vua, chỉ dưới bệ mà kêu.
  ― bức.  id.
  ― ba.  Lật đật, bước tới, bươn chạy.
  ― bả.  id.
- | 喪  ― tang.  Chính nghĩa là nghe tin dữ, lật đật trở về mà chịu tang. Tục hay
-
-
-
-hiểu lộn với tiếng buông tang, nghĩa là đoạn tang hoặc cho khỏi để tang
+ | 喪  ― tang.  Chính nghĩa là nghe tin dữ, lật đật trở về mà chịu tang. Tục hay hiểu lộn với tiếng buông tang, nghĩa là đoạn tang hoặc cho khỏi để tang
 淫  |   Dâm ―. tội ngoại tình.
 
 

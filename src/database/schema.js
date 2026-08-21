@@ -12,6 +12,7 @@ class DatabaseSchema {
           word_type TEXT,
           meaning TEXT,
           ancient_char TEXT,
+          meaning_blocks TEXT,
           source_file TEXT,
           text_quality REAL DEFAULT 1.0,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -22,6 +23,7 @@ class DatabaseSchema {
         CREATE TABLE IF NOT EXISTS compounds (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           word_id INTEGER NOT NULL,
+          block_index INTEGER DEFAULT 0,
           phrase TEXT,
           compound TEXT,
           meaning TEXT,

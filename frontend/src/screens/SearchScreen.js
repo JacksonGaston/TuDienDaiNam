@@ -89,8 +89,11 @@ const SearchScreen = ({ navigation }) => {
     </TouchableOpacity>
   );
 
-  const renderCompound = ({ item }) => (
+  const renderCompound = (item) => (
     <View style={styles.compoundItem}>
+      {item.ancientChars ? (
+        <Text style={styles.compoundAncientChar}>{item.ancientChars}</Text>
+      ) : null}
       <Text style={styles.compoundText}>{item.compound}</Text>
       {item.meaning ? <Text style={styles.compoundMeaning}> — {item.meaning}</Text> : null}
     </View>
@@ -151,6 +154,9 @@ const SearchScreen = ({ navigation }) => {
             onPress={() => handleResultPress(match)}
           >
             <View style={styles.matchHeader}>
+              {match.ancientChar ? (
+                <Text style={styles.matchAncientChar}>{match.ancientChar}</Text>
+              ) : null}
               <Text style={styles.matchWord}>{match.word}</Text>
             </View>
             {match.pronunciation ? (
@@ -161,12 +167,23 @@ const SearchScreen = ({ navigation }) => {
             {match.compounds && match.compounds.length > 0 && (
               <View style={styles.compoundsSection}>
                 <Text style={styles.sectionTitle}>{t('compounds')}</Text>
-                <FlatList
-                  data={match.compounds}
-                  renderItem={renderCompound}
-                  keyExtractor={(_, i) => `compound-${i}`}
-                  scrollEnabled={false}
-                />
+                {match.compounds.map((block, blockIdx) => (
+                  <View key={`block-${blockIdx}`} style={styles.compoundBlock}>
+                    {block.meaning && match.compounds.length > 1 ? (
+                      <View style={styles.compoundBlockHeader}>
+                        {block.ancientChar ? (
+                          <Text style={styles.compoundBlockAncientChar}>{block.ancientChar}</Text>
+                        ) : null}
+                        <Text style={styles.compoundBlockMeaning}>{block.meaning}</Text>
+                      </View>
+                    ) : null}
+                    {block.compounds.map((item, i) => (
+                      <View key={`compound-${blockIdx}-${i}`}>
+                        {renderCompound(item)}
+                      </View>
+                    ))}
+                  </View>
+                ))}
               </View>
             )}
             <Text style={styles.matchDetailHint}>{t('tapForFullEntry')}</Text>
@@ -253,13 +270,26 @@ const styles = StyleSheet.create({
   matchCard: { padding: 20, borderBottomWidth: 1, borderBottomColor: '#e0e0e0' },
   matchDetailHint: { marginTop: 12, fontSize: 14, color: '#007AFF', fontWeight: '600' },
   matchHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+  matchAncientChar: { fontSize: 24, color: '#6c757d', marginRight: 8, fontFamily: 'serif' },
   matchWord: { fontSize: 32, fontWeight: '700', color: '#212529', flex: 1 },
   matchPronunciation: { fontSize: 18, color: '#6c757d', fontStyle: 'italic', marginBottom: 4 },
   matchType: { fontSize: 16, color: '#6c757d', marginBottom: 8 },
   matchMeaning: { fontSize: 16, lineHeight: 24, color: '#212549', marginBottom: 12 },
   sectionTitle: { fontSize: 18, fontWeight: '600', color: '#495057', marginBottom: 12 },
   compoundsSection: { marginTop: 8 },
+  compoundBlock: { marginBottom: 12 },
+  compoundBlockHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+    paddingBottom: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  compoundBlockAncientChar: { fontSize: 14, color: '#6c757d', marginRight: 6, fontFamily: 'serif' },
+  compoundBlockMeaning: { fontSize: 14, color: '#495057', fontStyle: 'italic' },
   compoundItem: { paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: '#f5f5f5' },
+  compoundAncientChar: { fontSize: 13, color: '#6c757d', marginRight: 6, fontFamily: 'serif' },
   compoundText: { fontSize: 15, color: '#212549', fontWeight: '600' },
   compoundMeaning: { fontSize: 14, color: '#495057' },
   relatedSection: { padding: 16, borderBottomWidth: 1, borderBottomColor: '#e0e0e0' },

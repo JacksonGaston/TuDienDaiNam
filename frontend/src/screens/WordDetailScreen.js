@@ -86,6 +86,9 @@ const WordDetailScreen = ({ route, navigation }) => {
     <ScrollView style={styles.container}>
       <View style={styles.header}>
         <View style={styles.wordHeader}>
+          {currentWord.ancientChar ? (
+            <Text style={styles.ancientChar}>{currentWord.ancientChar}</Text>
+          ) : null}
           <Text style={styles.word}>{currentWord.word}</Text>
         </View>
 
@@ -106,10 +109,27 @@ const WordDetailScreen = ({ route, navigation }) => {
       {currentWord.compounds && currentWord.compounds.length > 0 && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{t('compounds')}</Text>
-          {currentWord.compounds.map((item, index) => (
-            <View key={index} style={styles.exampleItem}>
-              <Text style={styles.compoundText}>{item.compound}</Text>
-              {item.meaning ? <Text style={styles.exampleText}> — {item.meaning}</Text> : null}
+          {currentWord.compounds.map((block, blockIndex) => (
+            <View key={`block-${blockIndex}`} style={styles.compoundBlock}>
+              {block.meaning && currentWord.compounds.length > 1 ? (
+                <View style={styles.compoundBlockHeader}>
+                  {block.ancientChar ? (
+                    <Text style={styles.compoundBlockAncientChar}>{block.ancientChar}</Text>
+                  ) : null}
+                  <Text style={styles.compoundBlockMeaning}>{block.meaning}</Text>
+                </View>
+              ) : null}
+              {block.compounds.map((item, i) => (
+                <View key={`compound-${blockIndex}-${i}`} style={styles.exampleItem}>
+                  <View style={styles.compoundRow}>
+                    {item.ancientChars ? (
+                      <Text style={styles.compoundAncientChar}>{item.ancientChars}</Text>
+                    ) : null}
+                    <Text style={styles.compoundText}>{item.compound}</Text>
+                  </View>
+                  {item.meaning ? <Text style={styles.exampleText}> — {item.meaning}</Text> : null}
+                </View>
+              ))}
             </View>
           ))}
         </View>
@@ -215,6 +235,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 8,
   },
+  ancientChar: {
+    fontSize: 24,
+    color: '#6c757d',
+    marginRight: 8,
+    fontFamily: 'serif',
+  },
   word: {
     fontSize: 32,
     fontWeight: '700',
@@ -247,6 +273,19 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     color: '#212529',
   },
+  compoundBlock: { marginBottom: 12 },
+  compoundBlockHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+    paddingBottom: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  compoundBlockAncientChar: { fontSize: 14, color: '#6c757d', marginRight: 6, fontFamily: 'serif' },
+  compoundBlockMeaning: { fontSize: 14, color: '#495057', fontStyle: 'italic' },
+  compoundRow: { flexDirection: 'row', alignItems: 'center' },
+  compoundAncientChar: { fontSize: 13, color: '#6c757d', marginRight: 6, fontFamily: 'serif' },
   compoundText: {
     fontSize: 15,
     fontWeight: '600',

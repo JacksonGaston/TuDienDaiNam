@@ -52,8 +52,8 @@ class DatabaseSeeder {
     const insertSQL = `
       INSERT OR IGNORE INTO words (
         word, normalized_word, pronunciation, word_type, meaning,
-        ancient_char, source_file, text_quality
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ancient_char, meaning_blocks, source_file, text_quality
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
     let successCount = 0;
     const errors = [];
@@ -66,7 +66,7 @@ class DatabaseSeeder {
           try {
             await this.runQuery(db, insertSQL, [
               pe.word, pe.normalizedWord, pe.pronunciation, pe.wordType,
-              pe.meaning, pe.ancientChar, pe.sourceFile, pe.textQuality
+              pe.meaning, pe.ancientChar, pe.meaningBlocks, pe.sourceFile, pe.textQuality
             ]);
             successCount++;
           } catch (error) {
@@ -97,6 +97,7 @@ class DatabaseSeeder {
       wordType: entry.wordType || '',
       meaning: entry.meaning || '',
       ancientChar: entry.ancientChar || '',
+      meaningBlocks: JSON.stringify(entry.meaningBlocks || []),
       sourceFile: entry.sourceFile || '',
       textQuality: entry.textQuality || 1.0
     };
@@ -116,6 +117,7 @@ class DatabaseSeeder {
         if (c.compound && c.compound !== '') {
           compoundRows.push({
             word_id: wordId,
+            block_index: c.blockIndex || 0,
             phrase: c.phrase || '',
             compound: c.compound,
             meaning: c.meaning || '',
@@ -129,7 +131,7 @@ class DatabaseSeeder {
       await this.runQuery(db, 'BEGIN');
       inserted = await batchInsert(
         (d, sql, params) => this.runQuery(d, sql, params),
-        db, 'compounds', ['word_id', 'phrase', 'compound', 'meaning', 'ancient_chars'], compoundRows
+        db, 'compounds', ['word_id', 'block_index', 'phrase', 'compound', 'meaning', 'ancient_chars'], compoundRows
       );
       await this.runQuery(db, 'COMMIT');
     } catch (e) {

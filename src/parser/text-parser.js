@@ -60,7 +60,84 @@ class TextParser {
     if (currentBlock) {
       this.finalizeBlock(currentBlock, blockIndex, textFile, entries);
     }
-    return entries;
+    return this.mergeDuplicateEntries(entries);
+  }
+
+  mergeDuplicateEntries(entries) {
+    const groups = new Map();
+    const order = [];
+    for (const entry of entries) {
+      const key = entry.word;
+      if (!groups.has(key)) {
+        groups.set(key, []);
+        order.push(key);
+      }
+      groups.get(key).push(entry);
+    }
+
+    const merged = [];
+    for (const key of order) {
+      const group = groups.get(key);
+      if (group.length === 1) {
+        const entry = group[0];
+        const compounds = (entry.compounds || []).map(c => ({ ...c, blockIndex: 0 }));
+        const meaningBlocks = [{
+          meaning: entry.meaning || '',
+          ancientChar: entry.ancientChar || '',
+          blockIndex: 0
+        }];
+        merged.push(this.finalizeEntry({
+          ...entry,
+          compounds,
+          meaningBlocks
+        }));
+        continue;
+      }
+
+      const primary = group[0];
+      const meanings = [];
+      const seenMeanings = new Set();
+      for (const e of group) {
+        const m = (e.meaning || '').trim();
+        if (m && !seenMeanings.has(m)) {
+          seenMeanings.add(m);
+          meanings.push(m);
+        }
+      }
+
+      const allCompounds = [];
+      const meaningBlocks = [];
+      const seenChars = new Set();
+      const ancientChars = [];
+      for (let i = 0; i < group.length; i++) {
+        const e = group[i];
+        meaningBlocks.push({
+          meaning: (e.meaning || '').trim(),
+          ancientChar: (e.ancientChar || '').trim(),
+          blockIndex: i
+        });
+        for (const c of (e.compounds || [])) {
+          allCompounds.push({ ...c, blockIndex: i });
+        }
+        const ch = (e.ancientChar || '').trim();
+        if (ch && !seenChars.has(ch)) {
+          seenChars.add(ch);
+          ancientChars.push(ch);
+        }
+      }
+
+      const mergedEntry = {
+        ...primary,
+        meaning: meanings.join('\n'),
+        compounds: allCompounds,
+        meaningBlocks: meaningBlocks,
+        ancientChar: ancientChars.join(' ')
+      };
+
+      merged.push(this.finalizeEntry(mergedEntry));
+    }
+
+    return merged;
   }
 
   finalizeBlock(block, blockIndex, textFile, entries) {

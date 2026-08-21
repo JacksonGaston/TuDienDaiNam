@@ -70,7 +70,7 @@ function levenshtein(a, b) {
   return prev[n];
 }
 
-const WORD_COLUMNS = 'id, word, pronunciation, word_type AS wordType, meaning, ancient_char AS ancientChar, source_file AS sourceFile, text_quality AS textQuality';
+const WORD_COLUMNS = 'id, word, pronunciation, word_type AS wordType, meaning, ancient_char AS ancientChar, meaning_blocks AS meaningBlocks, source_file AS sourceFile, text_quality AS textQuality';
 
 function rankByQuery(q) {
   const lower = (q || '').toLowerCase();
@@ -138,7 +138,7 @@ class DictionaryService {
       const normQ = normalizeForSearch(q);
       if (normQ) {
         const normRows = await this.executeSelect(
-          'SELECT id, word, word_type AS wordType, meaning FROM words WHERE normalized_word = ? ORDER BY word',
+          `SELECT ${WORD_COLUMNS} FROM words WHERE normalized_word = ? ORDER BY word`,
           [normQ]
         );
         if (normRows.length > 0) {
@@ -152,7 +152,7 @@ class DictionaryService {
           }
         } else {
           const prefixRows = await this.executeSelect(
-            'SELECT id, word, word_type AS wordType, meaning FROM words WHERE normalized_word LIKE ? ORDER BY word LIMIT 12',
+            `SELECT ${WORD_COLUMNS} FROM words WHERE normalized_word LIKE ? ORDER BY word LIMIT 12`,
             [normQ + '%']
           );
           if (prefixRows.length > 0) {
@@ -174,7 +174,7 @@ class DictionaryService {
     suggestions = dedupeById(suggestions);
 
     if (match) {
-      match.compounds = await this.getCompounds(match.id);
+      match.compounds = await this.getCompounds(match.id, match.meaningBlocks);
     }
 
     return { match, suggestions, notFound: !match };
@@ -204,12 +204,41 @@ class DictionaryService {
     return rows;
   }
 
-  async getCompounds(wordId) {
+  async getCompounds(wordId, meaningBlocks = []) {
     const rows = await this.executeSelect(
-      'SELECT compound AS compound, meaning, ancient_chars AS ancientChars FROM compounds WHERE word_id = ? ORDER BY id',
+      'SELECT block_index AS blockIndex, compound AS compound, meaning, ancient_chars AS ancientChars FROM compounds WHERE word_id = ? ORDER BY block_index, id',
       [wordId]
     );
-    return rows.map(r => ({ compound: r.compound, meaning: r.meaning, ancientChars: r.ancientChars }));
+    const blockMap = new Map();
+    for (const r of rows) {
+      const idx = r.blockIndex != null ? r.blockIndex : 0;
+      if (!blockMap.has(idx)) {
+        blockMap.set(idx, { blockIndex: idx, meaning: '', ancientChar: '', compounds: [] });
+      }
+      blockMap.get(idx).compounds.push({
+        compound: r.compound,
+        meaning: r.meaning,
+        ancientChars: r.ancientChars
+      });
+    }
+    for (const [idx, block] of blockMap) {
+      const mb = meaningBlocks.find(b => b.blockIndex === idx);
+      if (mb) {
+        block.meaning = mb.meaning || '';
+        block.ancientChar = mb.ancientChar || '';
+      }
+    }
+    if (blockMap.size === 0 && meaningBlocks.length > 0) {
+      for (const mb of meaningBlocks) {
+        blockMap.set(mb.blockIndex || 0, {
+          blockIndex: mb.blockIndex || 0,
+          meaning: mb.meaning || '',
+          ancientChar: mb.ancientChar || '',
+          compounds: []
+        });
+      }
+    }
+    return Array.from(blockMap.values()).sort((a, b) => a.blockIndex - b.blockIndex);
   }
 
   mapWord(row) {
@@ -220,6 +249,9 @@ class DictionaryService {
       wordType: row.wordType || '',
       meaning: row.meaning || '',
       ancientChar: row.ancientChar || '',
+      meaningBlocks: (() => {
+        try { return row.meaningBlocks ? JSON.parse(row.meaningBlocks) : []; } catch { return []; }
+      })(),
       sourceFile: row.sourceFile || '',
       textQuality: row.textQuality != null ? row.textQuality : 1.0
     } : null;
@@ -241,7 +273,7 @@ class DictionaryService {
     );
     if (!row) return null;
     const word = this.mapWord(row);
-    word.compounds = await this.getCompounds(wordId);
+    word.compounds = await this.getCompounds(wordId, word.meaningBlocks);
     return word;
   }
 
@@ -253,7 +285,7 @@ class DictionaryService {
     );
     if (!row) return null;
     const mapped = this.mapWord(row);
-    mapped.compounds = await this.getCompounds(mapped.id);
+    mapped.compounds = await this.getCompounds(mapped.id, mapped.meaningBlocks);
     return mapped;
   }
 
@@ -280,7 +312,7 @@ class DictionaryService {
 
   async getRandomWords(limit = 10) {
     const rows = await this.executeSelect(
-      'SELECT id, word, pronunciation, word_type AS wordType, meaning, text_quality AS textQuality FROM words WHERE text_quality > 0.5 ORDER BY RANDOM() LIMIT ?',
+      `SELECT ${WORD_COLUMNS} FROM words WHERE text_quality > 0.5 ORDER BY RANDOM() LIMIT ?`,
       [limit]
     );
     return rows.map(r => this.mapWord(r));
