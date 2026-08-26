@@ -44,6 +44,13 @@ const translations = {
     na: 'N/A',
     qualityLevel: '{quality} quality',
     rank: 'Rank: {value}',
+    installAppTitle: 'Install this dictionary',
+    installAppBody: 'Add it to your home screen to use it fully offline.',
+    installAppButton: 'Install',
+    iosInstallStep1: 'Tap the Share button in the Safari toolbar.',
+    iosInstallStep2: "Then choose 'Add to Home Screen'.",
+    dismiss: 'Dismiss',
+    downloadApk: 'Download APK for Android (direct install) ›',
   },
   dainamese: {
     searchDictionary: 'Tìm Kiếm',
@@ -90,6 +97,13 @@ const translations = {
     na: 'N/A',
     qualityLevel: 'Chất lượng {quality}',
     rank: 'Xếp hạng: {value}',
+    installAppTitle: 'Cài đặt từ điển',
+    installAppBody: 'Thêm vào màn hình chính để dùng hoàn toàn offline.',
+    installAppButton: 'Cài đặt',
+    iosInstallStep1: 'Chạm nút Chia sẻ trên thanh công cụ Safari.',
+    iosInstallStep2: "Sau đó chọn 'Thêm vào Màn hình chính'.",
+    dismiss: 'Đóng',
+    downloadApk: 'Tải file APK cho Android (cài trực tiếp) ›',
   },
 };
 

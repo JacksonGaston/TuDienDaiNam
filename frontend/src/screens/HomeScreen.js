@@ -6,9 +6,13 @@ import {
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
+  Linking,
 } from 'react-native';
 import { dictionaryService } from '../services/dictionaryService';
 import { useTranslation } from '../i18n/LanguageContext';
+import PWAInstallPrompt from '../components/PWAInstallPrompt';
+
+const APK_RELEASE_URL = 'https://github.com/JacksonGaston/TuDienDaiNam/releases/latest';
 
 const HomeScreen = ({ navigation }) => {
   const [stats, setStats] = useState(null);
@@ -90,6 +94,8 @@ const HomeScreen = ({ navigation }) => {
         </TouchableOpacity>
       </View>
 
+      <PWAInstallPrompt />
+
       <View style={styles.statsContainer}>
         <Text style={styles.statsTitle}>{t('dictionaryStatistics')}</Text>
         <View style={styles.statsRow}>
@@ -139,6 +145,9 @@ const HomeScreen = ({ navigation }) => {
         <Text style={styles.infoText}>
           {t('aboutDescription2')}
         </Text>
+        <TouchableOpacity onPress={() => Linking.openURL(APK_RELEASE_URL)}>
+          <Text style={styles.linkText}>{t('downloadApk')}</Text>
+        </TouchableOpacity>
       </View>
     </ScrollView>
   );
@@ -310,6 +319,11 @@ const styles = StyleSheet.create({
     color: '#666',
     lineHeight: 20,
     marginBottom: 12,
+  },
+  linkText: {
+    fontSize: 14,
+    color: '#007AFF',
+    fontWeight: '600',
   },
   errorContainer: {
     flex: 1,

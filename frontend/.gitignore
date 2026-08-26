@@ -1,1 +1,7 @@
 .expo/
+
+# Wrangler respects .gitignore when running `wrangler pages deploy dist`.
+# The root .gitignore's bare `node_modules` pattern would otherwise exclude
+# dist/assets/node_modules/** (expo-sqlite wasm + navigation icons) from the
+# deployment. Negate it here — deeper .gitignore rules take precedence.
+!dist/assets/node_modules/**
