@@ -49,7 +49,15 @@ cd frontend
 npm run build:web
 wrangler pages project create tudiendainam --production-branch main   # once
 wrangler pages deploy dist --project-name tudiendainam --branch main
+node scripts/verify-deploy.js https://tudiendainam.pages.dev   # smoke test
 ```
+
+`scripts/verify-deploy.js` fetches the live WASM and dictionary DB and asserts
+both the `content-type` and binary magic bytes. Cloudflare Pages serves
+`index.html` (HTTP 200) for *any* missing file, so a silently-dropped asset
+looks successful but returns HTML — which the browser then tries to load as
+WebAssembly and fails with `expected application/wasm, found <!DO`. The smoke
+test catches this before users do. It exits non-zero on failure.
 
 > **Note (wrangler v4):** subcommands are space-separated — `pages project
 > create`, not `pages project-create`.
@@ -64,9 +72,43 @@ Live at `https://tudiendainam.pages.dev`. HTTPS is automatic (required for
 service workers). `pwa/_headers` is copied into `dist/` and sets immutable
 caching for hashed assets and no-cache for `sw.js` / `index.html`.
 
-To update: edit code → `npm run build:web` → `wrangler pages deploy dist --project-name tudiendainam --branch main`.
+To update: edit code → `npm run build:web` → `wrangler pages deploy dist --project-name tudiendainam --branch main` → `node scripts/verify-deploy.js https://tudiendainam.pages.dev`.
 Users get the new version on next online visit (SW activates in background;
 second visit uses it).
+
+## 6. Troubleshooting: "database error" / WASM loads as HTML
+
+Symptom: the console shows
+`WebAssembly.instantiate(): expected magic word 00 61 73 6d, found 3c 21 44 4f`
+(`<!DO` = an HTML page), and the app reports a database error.
+
+Root cause: an asset (SQLite WASM or `dictionary.db`) was missing from the
+deploy. wrangler Pages silently drops anything under `**/node_modules`, and
+Cloudflare serves `index.html` (HTTP 200) for missing files. The Service Worker
+then cached that HTML under the asset name and keeps serving it cache-first.
+
+Why a normal "clear cache" doesn't help: it does **not** remove the Service
+Worker or its Cache Storage. Recovery steps:
+
+1. **For the affected browser (fastest):** DevTools → Application →
+   Service Workers → **Unregister**, then Application → Storage → **Clear site
+   data**, and reload. Or run in the console:
+   ```js
+   navigator.serviceWorker.getRegistrations().then(rs => rs.forEach(r => r.unregister())).then(() => location.reload())
+   ```
+   The app also auto-heals on web: if DB init fails it unregisters the SW and
+   reloads once.
+2. **Fix the deploy (so it doesn't recur):** re-run `npm run build:web` (this
+   runs `add-pwa.js`, which now aborts the build if the WASM/DB are missing or
+   invalid, and relocates `node_modules` assets to `dist/assets/ext/`), then
+   `wrangler pages deploy dist --project-name tudiendainam --branch main` and the
+   `verify-deploy.js` smoke test. Always pass `--branch main` (see the note
+   above) — a deploy on another branch becomes a *preview* deployment with a
+   different URL and will not fix production.
+
+The Service Worker self-heals too: on a cache hit for `.wasm`/`.db` it validates
+the content-type and, if it is HTML, drops the entry and re-fetches from the
+network.
 
 ## 3. Local verification
 

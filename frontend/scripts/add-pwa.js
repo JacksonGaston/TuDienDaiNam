@@ -19,6 +19,10 @@ const root = path.resolve(__dirname, '..');
 const dist = path.join(root, 'dist');
 const pwaDir = path.join(root, 'pwa');
 
+// Bump when the service worker logic changes so that every deploy produces a
+// new cache name, forcing old (possibly poisoned) caches to be discarded.
+const SW_VERSION = 2;
+
 const INJECT_START = '<!-- PWA-INJECT -->';
 const INJECT_END = '<!-- /PWA-INJECT -->';
 
@@ -74,6 +78,74 @@ function walk(dir, baseDir = dir, out = []) {
     }
   }
   return out;
+}
+
+// Guard against shipping a broken PWA. wrangler Pages has a hardcoded
+// `**/node_modules` exclusion, so if the flatten step did not run the WASM /
+// DB assets are silently dropped — and Cloudflare then serves index.html
+// (HTTP 200) for those paths. That HTML ends up cached as the "WASM", which is
+// exactly the "expected application/wasm, found <!DO" database error. Fail the
+// build loudly so a broken dist never reaches production.
+function assertCriticalAssets() {
+  const files = walk(dist);
+  const wasm = files.find((f) => f.endsWith('.wasm'));
+  const db = files.find((f) => f.endsWith('.db'));
+
+  const problems = [];
+
+  if (!wasm) {
+    problems.push('No .wasm asset found in dist/ (wa-sqlite WASM missing).');
+  } else if (wasm.includes('node_modules')) {
+    problems.push(
+      `WASM still lives under a node_modules path (/${wasm}). wrangler's ` +
+        'hardcoded **/node_modules exclusion will drop it on deploy — the ' +
+        'flatten step did not run.'
+    );
+  } else {
+    const buf = fs.readFileSync(path.join(dist, wasm));
+    if (
+      buf.length < 4 ||
+      buf[0] !== 0x00 ||
+      buf[1] !== 0x61 ||
+      buf[2] !== 0x73 ||
+      buf[3] !== 0x6d
+    ) {
+      problems.push(
+        `WASM asset /${wasm} is not a valid WebAssembly module (bad magic ` +
+          'bytes). It may be an HTML error page captured during export.'
+      );
+    }
+  }
+
+  if (!db) {
+    problems.push('No .db asset found in dist/ (dictionary database missing).');
+  } else if (db.includes('node_modules')) {
+    problems.push(
+      `DB still lives under a node_modules path (/${db}). wrangler will drop ` +
+        'it on deploy — the flatten step did not run.'
+    );
+  } else {
+    const buf = fs.readFileSync(path.join(dist, db));
+    const header = buf.subarray(0, 15).toString('latin1');
+    if (header !== 'SQLite format 3') {
+      problems.push(
+        `DB asset /${db} is not a valid SQLite file (expected "SQLite format 3", ` +
+          `got "${header}"). It may be an HTML error page.`
+      );
+    }
+  }
+
+  if (problems.length) {
+    console.error('\n❌ PWA build aborted — critical assets are invalid/missing:');
+    for (const p of problems) console.error('  • ' + p);
+    console.error(
+      '\nFix: ensure `node scripts/add-pwa.js` runs AFTER `expo export` ' +
+        '(npm run build:web does this), then re-run the build and deploy.\n'
+    );
+    process.exit(1);
+  }
+
+  console.log(`Critical asset check passed: /${wasm} (valid WASM), /${db}`);
 }
 
 function buildInjectBlock() {
@@ -138,6 +210,10 @@ function main() {
   // Move node_modules assets out of the excluded path before building precache.
   flattenNodeModulesAssets();
 
+  // Fail the build if the critical binary assets are missing or invalid so we
+  // never deploy an app that fails to load its database.
+  assertCriticalAssets();
+
   // Collect precache URLs from everything currently in dist/ except runtime files.
   const files = walk(dist).filter(
     (rel) => rel !== 'sw.js' && rel !== '_headers' && rel !== 'manifest.webmanifest'
@@ -146,7 +222,9 @@ function main() {
   const precacheUrls = ['/', ...files.map((rel) => '/' + rel)];
 
   const cacheName =
-    'tuidiendainam-' +
+    'tuidiendainam-v' +
+    SW_VERSION +
+    '-' +
     crypto
       .createHash('sha256')
       .update(files.join('\n'))

@@ -337,12 +337,45 @@ class DictionaryService {
     if (this.isInitialized) return Promise.resolve();
     if (!this.initPromise) {
       this.initPromise = this._initialize()
-        .catch((error) => {
+        .catch(async (error) => {
           this.initPromise = null;
+          // On web, a common failure mode is a stale Service Worker serving a
+          // poisoned asset cache (an HTML error page cached as the WASM/DB).
+          // Unregister the SW and reload once so the browser re-fetches cleanly.
+          if (
+            Platform.OS === 'web' &&
+            typeof window !== 'undefined' &&
+            !window.__tudienHealAttempted
+          ) {
+            window.__tudienHealAttempted = true;
+            try {
+              const healed = await this._healServiceWorker();
+              if (healed) {
+                window.location.reload();
+                await new Promise(() => {}); // suspend until reload
+              }
+            } catch (_) {
+              /* fall through to rethrow */
+            }
+          }
           throw error;
         });
     }
     return this.initPromise;
+  }
+
+  async _healServiceWorker() {
+    if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) {
+      return false;
+    }
+    try {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      if (registrations.length === 0) return false;
+      await Promise.all(registrations.map((r) => r.unregister()));
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   async _initialize() {

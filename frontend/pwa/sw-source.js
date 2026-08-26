@@ -4,11 +4,57 @@
 const CACHE_NAME = '__CACHE_NAME__';
 const PRECACHE_URLS = __PRECACHE_URLS__;
 
+// Returns false for responses that must never be cached under a given path
+// (e.g. an HTML error page captured for a .wasm/.db request).
+function isCacheableAsset(pathname, contentType) {
+  if (contentType && contentType.includes('text/html')) {
+    return false;
+  }
+  if (pathname.endsWith('.wasm') && contentType && !contentType.includes('application/wasm')) {
+    return false;
+  }
+  if (pathname.endsWith('.db') && contentType && contentType.includes('text/html')) {
+    return false;
+  }
+  return true;
+}
+
+// Precache each URL individually and validate the response before storing it.
+// We never cache an HTML error page under a binary asset name (.wasm/.db):
+// Cloudflare Pages returns index.html (HTTP 200) for missing files, so an
+// unchecked cache.addAll would permanently poison the cache with HTML and
+// break WebAssembly/SQLite loading. A failed/skipped entry is logged but does
+// not abort the install.
+async function precacheAll(cache, urls) {
+  const results = await Promise.allSettled(
+    urls.map(async (url) => {
+      const response = await fetch(url);
+      const ct = response.headers.get('content-type');
+      const pathname = new URL(url, self.location.href).pathname;
+      // HTML is only acceptable for the app shell, never for binary assets.
+      const isBinaryAsset = pathname.endsWith('.wasm') || pathname.endsWith('.db');
+      const badBinary =
+        isBinaryAsset && (response.status !== 200 || !isCacheableAsset(pathname, ct));
+      if (!response.ok || badBinary) {
+        console.warn('[SW] skipping precache of', url, response.status, ct);
+        return;
+      }
+      await cache.put(url, response);
+    })
+  );
+  const rejected = results.filter((r) => r.status === 'rejected');
+  if (rejected.length) {
+    console.warn(
+      '[SW] ' + rejected.length + ' precache entr' + (rejected.length === 1 ? 'y' : 'ies') + ' failed to fetch'
+    );
+  }
+}
+
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches
       .open(CACHE_NAME)
-      .then((cache) => cache.addAll(PRECACHE_URLS))
+      .then((cache) => precacheAll(cache, PRECACHE_URLS))
       .then(() => self.skipWaiting())
   );
 });
@@ -52,18 +98,37 @@ self.addEventListener('fetch', (event) => {
   // content-addressed filenames, so cache-first is safe.
   if (/^\/(assets|_expo)\//.test(url.pathname)) {
     event.respondWith(
-      caches.match(request).then(
-        (cached) =>
-          cached ||
-          fetch(request).then((response) => {
-            const copy = response.clone();
-            caches
-              .open(CACHE_NAME)
-              .then((cache) => cache.put(request, copy))
-              .catch(() => {});
-            return response;
-          })
-      )
+      caches.match(request).then((cached) => {
+        // Self-heal: never serve a cached HTML error page for a binary asset.
+        // If a poisoned entry exists (e.g. from a previous broken deploy), drop
+        // it and re-fetch straight from the network.
+        if (cached && !isCacheableAsset(url.pathname, cached.headers.get('content-type'))) {
+          return caches
+            .open(CACHE_NAME)
+            .then((cache) => cache.delete(request))
+            .catch(() => {})
+            .then(() => fetch(request, { cache: 'reload' }))
+            .then((response) => {
+              if (
+                response.ok &&
+                isCacheableAsset(url.pathname, response.headers.get('content-type'))
+              ) {
+                const copy = response.clone();
+                caches.open(CACHE_NAME).then((cache) => cache.put(request, copy)).catch(() => {});
+              }
+              return response;
+            });
+        }
+        if (cached) return cached;
+        return fetch(request).then((response) => {
+          const copy = response.clone();
+          caches
+            .open(CACHE_NAME)
+            .then((cache) => cache.put(request, copy))
+            .catch(() => {});
+          return response;
+        });
+      })
     );
     return;
   }
