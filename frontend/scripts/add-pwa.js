@@ -22,6 +22,48 @@ const pwaDir = path.join(root, 'pwa');
 const INJECT_START = '<!-- PWA-INJECT -->';
 const INJECT_END = '<!-- /PWA-INJECT -->';
 
+// Wrangler Pages has a hardcoded `**/node_modules` exclusion in its file
+// walker that cannot be overridden via .gitignore.  Metro places assets
+// under dist/assets/node_modules/**, which means they silently vanish from
+// the deployment.  Fix: physically relocate these files to dist/assets/ext/
+// and rewrite every JS reference before the precache walk runs.
+
+function flattenNodeModulesAssets() {
+  const srcDir = path.join(dist, 'assets', 'node_modules');
+  const destDir = path.join(dist, 'assets', 'ext');
+  if (!fs.existsSync(srcDir)) return { count: 0, destDir: null, srcDir: null };
+
+  const files = walk(srcDir);
+  fs.mkdirSync(destDir, { recursive: true });
+  for (const rel of files) {
+    const destPath = path.join(destDir, rel);
+    fs.mkdirSync(path.dirname(destPath), { recursive: true });
+    fs.renameSync(path.join(srcDir, rel), destPath);
+  }
+  fs.rmSync(srcDir, { recursive: true, force: true });
+
+  // Patch every JS/JSON asset in dist to replace the old paths.
+  const bundles = walk(dist).filter(
+    (rel) => rel.endsWith('.js') || rel.endsWith('.json')
+  );
+  let patchedCount = 0;
+  for (const rel of bundles) {
+    const fp = path.join(dist, rel);
+    let content = fs.readFileSync(fp, 'utf8');
+    if (content.includes('/assets/node_modules/')) {
+      content = content.replaceAll('/assets/node_modules/', '/assets/ext/');
+      fs.writeFileSync(fp, content);
+      patchedCount++;
+    }
+  }
+
+  console.log(
+    `Flattened ${files.length} node_modules assets to dist/assets/ext/ ` +
+    `(patched ${patchedCount} bundles)`
+  );
+  return { count: files.length, destDir, srcDir };
+}
+
 function walk(dir, baseDir = dir, out = []) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const fullPath = path.join(dir, entry.name);
@@ -92,6 +134,9 @@ function main() {
   );
   fs.copyFileSync(path.join(pwaDir, '_headers'), path.join(dist, '_headers'));
   fs.cpSync(path.join(pwaDir, 'icons'), path.join(dist, 'icons'), { recursive: true });
+
+  // Move node_modules assets out of the excluded path before building precache.
+  flattenNodeModulesAssets();
 
   // Collect precache URLs from everything currently in dist/ except runtime files.
   const files = walk(dist).filter(

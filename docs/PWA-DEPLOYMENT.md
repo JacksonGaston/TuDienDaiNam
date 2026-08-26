@@ -16,6 +16,12 @@ npm run build:web     # expo export --platform web + scripts/add-pwa.js
 
 `scripts/add-pwa.js` post-processes `dist/`:
 
+- **Flattens `node_modules` assets** — wrangler Pages has a hardcoded
+  `**/node_modules` exclusion that cannot be overridden via `.gitignore`.
+  Metro places assets (SQLite WASM, react-navigation icons) under
+  `dist/assets/node_modules/`, so the build step relocates them to
+  `dist/assets/ext/` and rewrites all JS bundle references. This is
+  transparent; nothing changes for the SW or the app runtime.
 - Generates `dist/sw.js` with a content-hashed cache name and a full precache
   manifest (app shell, JS bundles, `wa-sqlite.wasm`, and the ~13 MB
   `dictionary.db`). Every deploy produces a new cache name; old caches are
