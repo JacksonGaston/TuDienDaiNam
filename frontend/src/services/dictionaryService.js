@@ -10,6 +10,105 @@ import {
 const DATABASE_ASSET = require('../../assets/database/dictionary.db');
 const DB_NAME = 'dictionary.db';
 
+// Thrown when a critical binary asset (DB/WASM) was served as an HTML error
+// page — i.e. a poisoned cache from a previous broken deploy. This is the only
+// failure mode that should trigger the service-worker heal + reload.
+class PoisonedAssetError extends Error {}
+
+// Resolve once the page is controlled by an active service worker, or after a
+// timeout. On a cold, offline PWA launch the SW is not controlling the page
+// during early boot, so the cached .wasm/.db assets are only served once it is.
+// Waiting here prevents hanging on a dead network request (see sw-source.js
+// cache-first handler). The wasm fetch is issued internally by expo-sqlite, so
+// this gate must run before deserializeDatabaseAsync as well.
+function waitForServiceWorkerController(timeoutMs = 4000) {
+  if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) {
+    return Promise.resolve();
+  }
+  const sw = navigator.serviceWorker;
+  if (sw.controller) return Promise.resolve();
+  const onController = () =>
+    new Promise((resolve) => {
+      sw.addEventListener('controllerchange', () => resolve(), { once: true });
+    });
+  return Promise.race([
+    onController(),
+    sw.ready.then(() => (sw.controller ? undefined : onController())),
+    new Promise((resolve) => setTimeout(resolve, timeoutMs)),
+  ]);
+}
+
+// Fetch the database asset with resilience AND stream progress: a hanging/offline
+// network request must never block the app forever, but while bytes arrive we
+// report how many have been downloaded so the UI can show a real progress bar.
+// Mirrors the old fetchDatabaseWithFallback precedence (HTTP cache → Cache
+// Storage → network) but reads the response body incrementally to report progress.
+async function fetchDatabaseWithProgress(uri, onProgress) {
+  const isHtml = (res) => {
+    const ct = (res && res.headers && res.headers.get('content-type')) || '';
+    return ct.includes('text/html');
+  };
+  const report = (loaded, total) => {
+    if (onProgress) {
+      onProgress({ stage: 'download', loaded, total, percent: total ? loaded / total : 0 });
+    }
+  };
+
+  // Stream a fetch response into a single Uint8Array, reporting progress as we go.
+  const streamFetch = async (opts) => {
+    const res = await fetch(uri, opts);
+    if (!res.ok) return null;
+    if (!res.body || !res.body.getReader) {
+      // Environment without a readable stream (rare) — one-shot read, no progress.
+      const bytes = new Uint8Array(await res.arrayBuffer());
+      report(bytes.length, bytes.length);
+      return { bytes, poisoned: isHtml(res) };
+    }
+    const total = Number(res.headers.get('content-length')) || 0;
+    const reader = res.body.getReader();
+    const chunks = [];
+    let loaded = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      loaded += value.length;
+      report(loaded, total);
+    }
+    const bytes = new Uint8Array(loaded);
+    let offset = 0;
+    for (const c of chunks) {
+      bytes.set(c, offset);
+      offset += c.length;
+    }
+    return { bytes, poisoned: isHtml(res) };
+  };
+
+  if (typeof caches !== 'undefined') {
+    try {
+      const raced = await Promise.race([
+        streamFetch({ cache: 'force-cache' }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 4000)),
+      ]);
+      if (raced) return raced;
+    } catch (_) {
+      /* fall through to Cache Storage */
+    }
+    try {
+      const cached = await caches.match(uri, { ignoreSearch: true });
+      if (cached) {
+        const bytes = new Uint8Array(await cached.arrayBuffer());
+        report(bytes.length, bytes.length);
+        return { bytes, poisoned: isHtml(cached) };
+      }
+    } catch (_) {
+      /* fall through to last-resort network fetch */
+    }
+  }
+  return streamFetch();
+}
+
+
 const DIACRITIC_MAP = {
   'á': 'a', 'à': 'a', 'ả': 'a', 'ã': 'a', 'ạ': 'a',
   'ă': 'a', 'ắ': 'a', 'ằ': 'a', 'ẳ': 'a', 'ẵ': 'a', 'ặ': 'a',
@@ -333,18 +432,29 @@ class DictionaryService {
     try { await deleteDatabaseAsync(DB_NAME); } catch (e) {}
   }
 
-  initialize() {
+  initialize(onProgress) {
+    if (onProgress) {
+      // Wrap so that, once real bytes start arriving, we cancel the init
+      // watchdog — otherwise a legitimately slow (but progressing) download
+      // could be interrupted by a reload mid-transfer.
+      this.onProgress = (p) => {
+        if (p && p.stage === 'download' && p.loaded > 0) this._clearInitWatchdog();
+        onProgress(p);
+      };
+    }
     if (this.isInitialized) return Promise.resolve();
     if (!this.initPromise) {
-      this.initPromise = this._initialize()
+      this.initPromise = this._initialize(onProgress)
         .catch(async (error) => {
           this.initPromise = null;
-          // On web, a common failure mode is a stale Service Worker serving a
-          // poisoned asset cache (an HTML error page cached as the WASM/DB).
-          // Unregister the SW and reload once so the browser re-fetches cleanly.
+          // Only heal when a critical binary asset was served as a poisoned
+          // cache (HTML error page). A genuine offline/timeout failure must NOT
+          // trigger an unregister+reload loop, which would just fail again
+          // offline. See PoisonedAssetError in initializeWeb().
           if (
             Platform.OS === 'web' &&
             typeof window !== 'undefined' &&
+            error instanceof PoisonedAssetError &&
             !window.__tudienHealAttempted
           ) {
             window.__tudienHealAttempted = true;
@@ -360,8 +470,40 @@ class DictionaryService {
           }
           throw error;
         });
+      // Safety net: if initialization stalls (e.g. the WASM fetch hangs because
+      // the page is not yet SW-controlled on a cold iOS PWA launch), force a
+      // single reload so the SW can take control and serve the cached assets.
+      // Bounded by sessionStorage to avoid a reload loop.
+      if (Platform.OS === 'web' && typeof window !== 'undefined') {
+        this._initWatchdog();
+      }
     }
     return this.initPromise;
+  }
+
+  _clearInitWatchdog() {
+    if (this._watchdogTimer) {
+      clearTimeout(this._watchdogTimer);
+      this._watchdogTimer = null;
+    }
+  }
+
+  _initWatchdog() {
+    if (this._watchdogArmed) return;
+    this._watchdogArmed = true;
+    this._watchdogTimer = setTimeout(() => {
+      if (this.isInitialized) return;
+      let n = 0;
+      try {
+        n = parseInt(sessionStorage.getItem('tudien_init_reloads') || '0', 10) || 0;
+      } catch (_) {}
+      if (n < 2) {
+        try {
+          sessionStorage.setItem('tudien_init_reloads', String(n + 1));
+        } catch (_) {}
+        window.location.reload();
+      }
+    }, 15000);
   }
 
   async _healServiceWorker() {
@@ -378,9 +520,9 @@ class DictionaryService {
     }
   }
 
-  async _initialize() {
+  async _initialize(onProgress) {
     if (Platform.OS === 'web') {
-      await this.initializeWeb();
+      await this.initializeWeb(onProgress);
       return;
     }
 
@@ -397,17 +539,29 @@ class DictionaryService {
   }
 
   async initializeWeb() {
+    // Ensure the page is controlled by the SW so the cached .wasm/.db assets
+    // are served (offline). Without this, a cold launch hits the dead network
+    // and hangs on the loading screen.
+    await waitForServiceWorkerController();
+
     const asset = Asset.fromModule(DATABASE_ASSET);
     const uri = asset.localUri || asset.uri;
     if (!uri) {
       throw new Error('Database asset has no downloadable URI on web');
     }
-    const res = await fetch(uri);
-    if (!res.ok) {
-      throw new Error('Failed to fetch database asset: ' + res.status + ' ' + res.statusText);
+
+    const onProgress = this.onProgress;
+    const { bytes, poisoned } = await fetchDatabaseWithProgress(uri, onProgress);
+    if (poisoned) {
+      throw new PoisonedAssetError(
+        'Database response is HTML, not a SQLite file (poisoned cache)'
+      );
     }
-    const bytes = new Uint8Array(await res.arrayBuffer());
+
+    onProgress?.({ stage: 'prepare', loaded: 0, total: 0, percent: 0 });
     this.db = await deserializeDatabaseAsync(bytes);
+    onProgress?.({ stage: 'ready', loaded: 1, total: 1, percent: 1 });
+
     const result = await this.db.getFirstAsync('SELECT COUNT(*) as count FROM words');
     if (!result || result.count === 0) {
       throw new Error('Database is empty after web deserialization');

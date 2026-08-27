@@ -21,7 +21,7 @@ const pwaDir = path.join(root, 'pwa');
 
 // Bump when the service worker logic changes so that every deploy produces a
 // new cache name, forcing old (possibly poisoned) caches to be discarded.
-const SW_VERSION = 2;
+const SW_VERSION = 3;
 
 const INJECT_START = '<!-- PWA-INJECT -->';
 const INJECT_END = '<!-- /PWA-INJECT -->';
@@ -160,9 +160,28 @@ function buildInjectBlock() {
     '<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />',
     '<script>',
     "if ('serviceWorker' in navigator) {",
-    "  window.addEventListener('load', function () {",
-    "    navigator.serviceWorker.register('/sw.js').catch(function () {});",
-    '  });',
+    "  navigator.serviceWorker.register('/sw.js').then(function () {",
+    "    // On iOS a standalone PWA is often NOT controlled by the SW on its",
+    "    // very first page load, so cached .wasm/.db assets fall through to",
+    "    // the (offline) network and initialization hangs. Once the SW claims",
+    "    // this client, reload once so the now-controlled page is served those",
+    "    // assets from the SW cache. A bounded retry guards the case where the",
+    "    // controllerchange event never fires.",
+    "    if (!navigator.serviceWorker.controller) {",
+    "      var reloads = 0;",
+    "      try { reloads = parseInt(sessionStorage.getItem('tudien_sw_reloads') || '0', 10) || 0; } catch (e) {}",
+    "      if (reloads < 2) {",
+    "        var fired = false;",
+    "        var go = function () {",
+    "          if (fired) return; fired = true;",
+    "          try { sessionStorage.setItem('tudien_sw_reloads', String(reloads + 1)); } catch (e) {}",
+    "          window.location.reload();",
+    "        };",
+    "        navigator.serviceWorker.addEventListener('controllerchange', go);",
+    "        setTimeout(go, 3000);",
+    "      }",
+    "    }",
+    "  }).catch(function () {});",
     '}',
     '</script>',
     INJECT_END,
@@ -218,18 +237,32 @@ function main() {
   const files = walk(dist).filter(
     (rel) => rel !== 'sw.js' && rel !== '_headers' && rel !== 'manifest.webmanifest'
   );
+  // Never precache the dictionary database. It is 13MB+ and the app fetches it
+  // at runtime anyway (and the SW's /assets/ cache-first handler caches it after
+  // the first fetch). Pre-caching it here would download the same huge file
+  // twice on every first visit, which is the main cause of the slow cold load.
+  const isDatabaseAsset = (rel) => /\.db(\.gz)?$/.test(rel);
+  const precacheFiles = files.filter((rel) => !isDatabaseAsset(rel));
   files.sort();
-  const precacheUrls = ['/', ...files.map((rel) => '/' + rel)];
+  precacheFiles.sort();
+  const precacheUrls = ['/', ...precacheFiles.map((rel) => '/' + rel)];
 
-  const cacheName =
-    'tuidiendainam-v' +
-    SW_VERSION +
-    '-' +
-    crypto
-      .createHash('sha256')
-      .update(files.join('\n'))
-      .digest('hex')
-      .slice(0, 12);
+  // Content-hash cache name: every file byte change (icons, manifest,
+  // bundles) produces a new SW and cache. Previous version hashed only
+  // filenames (files.join), so replacing an icon with the same filename
+  // kept the old cache forever.
+  const filesForHash = walk(dist).filter((rel) => rel !== 'sw.js');
+  filesForHash.sort();
+  const hash = crypto.createHash('sha256');
+  hash.update(`v${SW_VERSION}\n`);
+  for (const rel of filesForHash) {
+    hash.update(rel + '\n');
+    try {
+      hash.update(fs.readFileSync(path.join(dist, rel)));
+    } catch {}
+    hash.update('\n');
+  }
+  const cacheName = `tuidiendainam-v${SW_VERSION}-${hash.digest('hex').slice(0, 12)}`;
 
   // Generate dist/sw.js
   const swSource = fs.readFileSync(path.join(pwaDir, 'sw-source.js'), 'utf8');
@@ -243,7 +276,7 @@ function main() {
   fs.writeFileSync(indexHtmlPath, injectIntoIndexHtml(html));
 
   const dbEntry = files.find((f) => f.endsWith('.db'));
-  const totalBytes = files.reduce((sum, rel) => {
+  const totalBytes = precacheFiles.reduce((sum, rel) => {
     try {
       return sum + fs.statSync(path.join(dist, rel)).size;
     } catch {
@@ -252,7 +285,7 @@ function main() {
   }, 0);
   console.log(`PWA injected. Cache: ${cacheName}`);
   console.log(`Precached ${precacheUrls.length} URLs (~${(totalBytes / 1024 / 1024).toFixed(1)} MB)`);
-  if (dbEntry) console.log(`Dictionary asset cached: /${dbEntry}`);
+  if (dbEntry) console.log(`Dictionary asset served on-demand (not precached): /${dbEntry}`);
   else console.warn('WARNING: no .db asset found in dist — check metro config');
 }
 

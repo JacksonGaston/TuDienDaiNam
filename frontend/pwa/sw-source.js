@@ -98,7 +98,9 @@ self.addEventListener('fetch', (event) => {
   // content-addressed filenames, so cache-first is safe.
   if (/^\/(assets|_expo)\//.test(url.pathname)) {
     event.respondWith(
-      caches.match(request).then((cached) => {
+      // ignoreSearch so query-string variants (cache-busting, platform args)
+      // of a precached asset still match the cached entry.
+      caches.match(request, { ignoreSearch: true }).then((cached) => {
         // Self-heal: never serve a cached HTML error page for a binary asset.
         // If a poisoned entry exists (e.g. from a previous broken deploy), drop
         // it and re-fetch straight from the network.

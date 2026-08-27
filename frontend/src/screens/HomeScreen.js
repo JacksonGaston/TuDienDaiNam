@@ -19,6 +19,7 @@ const HomeScreen = ({ navigation }) => {
   const [randomWords, setRandomWords] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [progress, setProgress] = useState({ stage: 'download', loaded: 0, total: 0, percent: 0 });
   const { t, language, setLanguage } = useTranslation();
 
   useEffect(() => {
@@ -29,7 +30,7 @@ const HomeScreen = ({ navigation }) => {
     try {
       setIsLoading(true);
       setError(null);
-      await dictionaryService.initialize();
+      await dictionaryService.initialize((p) => setProgress(p));
 
       const wordCount = await dictionaryService.getWordCount();
       const randomWordsData = await dictionaryService.getRandomWords(5);
@@ -59,10 +60,14 @@ const HomeScreen = ({ navigation }) => {
   };
 
   if (isLoading) {
+    const pct = Math.round((progress.percent || 0) * 100);
+    const showPct = progress.stage === 'download' && progress.total > 0;
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#007AFF" />
-        <Text style={styles.loadingText}>{t('loadingDictionary')}</Text>
+        <View style={styles.progressCircle}>
+          <ActivityIndicator size="large" color="#007AFF" style={styles.progressSpinner} />
+          {showPct ? <Text style={styles.progressCircleText}>{pct}%</Text> : null}
+        </View>
       </View>
     );
   }
@@ -164,10 +169,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 32,
   },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: '#666',
+  progressCircle: {
+    width: 128,
+    height: 128,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  progressSpinner: {
+    transform: [{ scale: 1.6 }],
+  },
+  progressCircleText: {
+    position: 'absolute',
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#007AFF',
   },
   header: {
     backgroundColor: '#007AFF',
