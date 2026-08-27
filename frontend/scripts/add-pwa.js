@@ -157,7 +157,7 @@ function buildInjectBlock() {
     '<meta name="apple-mobile-web-app-capable" content="yes" />',
     '<meta name="apple-mobile-web-app-status-bar-style" content="default" />',
     '<meta name="apple-mobile-web-app-title" content="Tu Dien Dai Nam" />',
-    '<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />',
+    '<link rel="apple-touch-icon" href="/icons/apple-touch-icon-v2.png" />',
     '<script>',
     "if ('serviceWorker' in navigator) {",
     "  navigator.serviceWorker.register('/sw.js').then(function () {",

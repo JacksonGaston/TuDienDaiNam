@@ -3,9 +3,9 @@
 /**
  * Generates PWA icons from assets/icon.png using node-canvas.
  * Outputs to pwa/icons/:
- *   icon-192.png, icon-512.png        (purpose: any)
- *   maskable-192.png, maskable-512.png (purpose: maskable, safe-zone padded)
- *   apple-touch-icon.png               (180x180, opaque)
+ *   icon-192-v2.png, icon-512-v2.png        (purpose: any)
+ *   maskable-192-v2.png, maskable-512-v2.png (purpose: maskable, safe-zone padded)
+ *   apple-touch-icon-v2.png               (180x180, opaque)
  *
  * Run once: npm run icons  (outputs are committed)
  */
@@ -49,12 +49,12 @@ async function render(size, { maskable = false, background = null } = {}) {
   fs.mkdirSync(outDir, { recursive: true });
 
   const targets = [
-    { file: 'icon-192.png', size: 192 },
-    { file: 'icon-512.png', size: 512 },
-    { file: 'maskable-192.png', size: 192, opts: { maskable: true, background: THEME_COLOR } },
-    { file: 'maskable-512.png', size: 512, opts: { maskable: true, background: THEME_COLOR } },
+    { file: 'icon-192-v2.png', size: 192 },
+    { file: 'icon-512-v2.png', size: 512 },
+    { file: 'maskable-192-v2.png', size: 192, opts: { maskable: true, background: THEME_COLOR } },
+    { file: 'maskable-512-v2.png', size: 512, opts: { maskable: true, background: THEME_COLOR } },
     {
-      file: 'apple-touch-icon.png',
+      file: 'apple-touch-icon-v2.png',
       size: 180,
       opts: { background: '#ffffff' },
     },
