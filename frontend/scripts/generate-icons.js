@@ -18,8 +18,6 @@ const root = path.resolve(__dirname, '..');
 const sourceIcon = path.join(root, 'assets', 'icon.png');
 const outDir = path.join(root, 'pwa', 'icons');
 
-const THEME_COLOR = '#007AFF';
-
 async function render(size, { maskable = false, background = null } = {}) {
   const img = await loadImage(sourceIcon);
   const canvas = createCanvas(size, size);
@@ -51,8 +49,8 @@ async function render(size, { maskable = false, background = null } = {}) {
   const targets = [
     { file: 'icon-192-v2.png', size: 192 },
     { file: 'icon-512-v2.png', size: 512 },
-    { file: 'maskable-192-v2.png', size: 192, opts: { maskable: true, background: THEME_COLOR } },
-    { file: 'maskable-512-v2.png', size: 512, opts: { maskable: true, background: THEME_COLOR } },
+    { file: 'maskable-192-v2.png', size: 192, opts: { maskable: true } },
+    { file: 'maskable-512-v2.png', size: 512, opts: { maskable: true } },
     {
       file: 'apple-touch-icon-v2.png',
       size: 180,
