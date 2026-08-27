@@ -77,19 +77,27 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
-  // Navigations: network-first so deploys arrive, cached shell when offline.
+  // Navigations: offline-first (stale-while-revalidate). Serve the cached app
+  // shell immediately so the app paints with no network wait, then refresh the
+  // cached shell in the background when online. This is what makes airplane-mode
+  // / dead-network launches show the app instantly instead of a blank page.
   if (request.mode === 'navigate') {
     event.respondWith(
-      fetch(request)
-        .then((response) => {
-          const copy = response.clone();
-          caches
-            .open(CACHE_NAME)
-            .then((cache) => cache.put('/index.html', copy))
-            .catch(() => {});
-          return response;
-        })
-        .catch(() => caches.match('/index.html'))
+      caches.match('/index.html').then((cached) => {
+        const network = fetch(request)
+          .then((response) => {
+            if (response && response.status === 200) {
+              const copy = response.clone();
+              caches
+                .open(CACHE_NAME)
+                .then((cache) => cache.put('/index.html', copy))
+                .catch(() => {});
+            }
+            return response;
+          })
+          .catch(() => cached);
+        return cached || network;
+      })
     );
     return;
   }
@@ -122,14 +130,19 @@ self.addEventListener('fetch', (event) => {
             });
         }
         if (cached) return cached;
-        return fetch(request).then((response) => {
-          const copy = response.clone();
-          caches
-            .open(CACHE_NAME)
-            .then((cache) => cache.put(request, copy))
-            .catch(() => {});
-          return response;
-        });
+        return fetch(request)
+          .then((response) => {
+            const copy = response.clone();
+            caches
+              .open(CACHE_NAME)
+              .then((cache) => cache.put(request, copy))
+              .catch(() => {});
+            return response;
+          })
+          // Defensive fallback for transient network failures (e.g. several
+          // tabs populating the cache at once): serve the cached copy if one
+          // was written between our miss check and the fetch.
+          .catch(() => caches.match(request, { ignoreSearch: true }));
       })
     );
     return;

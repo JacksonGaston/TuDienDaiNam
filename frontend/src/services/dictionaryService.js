@@ -6,6 +6,7 @@ import {
   deleteDatabaseAsync,
   importDatabaseFromAssetAsync,
 } from 'expo-sqlite';
+import { getAssetBytes, setAssetBytes, deleteAsset } from '../web/localAssetCache';
 
 const DATABASE_ASSET = require('../../assets/database/dictionary.db');
 const DB_NAME = 'dictionary.db';
@@ -41,8 +42,11 @@ function waitForServiceWorkerController(timeoutMs = 4000) {
 // Fetch the database asset with resilience AND stream progress: a hanging/offline
 // network request must never block the app forever, but while bytes arrive we
 // report how many have been downloaded so the UI can show a real progress bar.
-// Mirrors the old fetchDatabaseWithFallback precedence (HTTP cache → Cache
-// Storage → network) but reads the response body incrementally to report progress.
+// Precedence for offline-first behaviour (no network wait on repeat launches):
+//   1. IndexedDB local store (instant, fully offline, no 13 MB re-download).
+//   2. Service Worker / HTTP cache (offline-safe, no progress).
+//   3. Network fetch with progress (only reached when online for the very first
+//      launch, then persisted to IndexedDB for next time).
 async function fetchDatabaseWithProgress(uri, onProgress) {
   const isHtml = (res) => {
     const ct = (res && res.headers && res.headers.get('content-type')) || '';
@@ -53,6 +57,17 @@ async function fetchDatabaseWithProgress(uri, onProgress) {
       onProgress({ stage: 'download', loaded, total, percent: total ? loaded / total : 0 });
     }
   };
+
+  // 1) Local IndexedDB store — instant, offline-first, no re-download.
+  try {
+    const local = await getAssetBytes(uri);
+    if (local && local.byteLength > 0) {
+      report(local.byteLength, local.byteLength);
+      return { bytes: local, poisoned: false, source: 'idb' };
+    }
+  } catch (_) {
+    /* fall through to cache/network */
+  }
 
   // Stream a fetch response into a single Uint8Array, reporting progress as we go.
   const streamFetch = async (opts) => {
@@ -84,28 +99,30 @@ async function fetchDatabaseWithProgress(uri, onProgress) {
     return { bytes, poisoned: isHtml(res) };
   };
 
+  // 2) Service Worker / HTTP cache (no progress bar, but offline-safe).
   if (typeof caches !== 'undefined') {
-    try {
-      const raced = await Promise.race([
-        streamFetch({ cache: 'force-cache' }),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 4000)),
-      ]);
-      if (raced) return raced;
-    } catch (_) {
-      /* fall through to Cache Storage */
-    }
     try {
       const cached = await caches.match(uri, { ignoreSearch: true });
       if (cached) {
         const bytes = new Uint8Array(await cached.arrayBuffer());
         report(bytes.length, bytes.length);
-        return { bytes, poisoned: isHtml(cached) };
+        const poisoned = isHtml(cached);
+        // Persist to IndexedDB so future launches read locally and skip the network.
+        if (!poisoned && bytes.length > 0) setAssetBytes(uri, bytes).catch(() => {});
+        return { bytes, poisoned, source: 'cache' };
       }
     } catch (_) {
       /* fall through to last-resort network fetch */
     }
   }
-  return streamFetch();
+
+  // 3) Last-resort network fetch with progress (reached online for the first
+  //    launch). Persist to IndexedDB for next time.
+  const result = await streamFetch();
+  if (result && !result.poisoned && result.bytes && result.bytes.length > 0) {
+    setAssetBytes(uri, result.bytes).catch(() => {});
+  }
+  return result;
 }
 
 
@@ -434,13 +451,7 @@ class DictionaryService {
 
   initialize(onProgress) {
     if (onProgress) {
-      // Wrap so that, once real bytes start arriving, we cancel the init
-      // watchdog — otherwise a legitimately slow (but progressing) download
-      // could be interrupted by a reload mid-transfer.
-      this.onProgress = (p) => {
-        if (p && p.stage === 'download' && p.loaded > 0) this._clearInitWatchdog();
-        onProgress(p);
-      };
+      this.onProgress = onProgress;
     }
     if (this.isInitialized) return Promise.resolve();
     if (!this.initPromise) {
@@ -470,40 +481,8 @@ class DictionaryService {
           }
           throw error;
         });
-      // Safety net: if initialization stalls (e.g. the WASM fetch hangs because
-      // the page is not yet SW-controlled on a cold iOS PWA launch), force a
-      // single reload so the SW can take control and serve the cached assets.
-      // Bounded by sessionStorage to avoid a reload loop.
-      if (Platform.OS === 'web' && typeof window !== 'undefined') {
-        this._initWatchdog();
-      }
     }
     return this.initPromise;
-  }
-
-  _clearInitWatchdog() {
-    if (this._watchdogTimer) {
-      clearTimeout(this._watchdogTimer);
-      this._watchdogTimer = null;
-    }
-  }
-
-  _initWatchdog() {
-    if (this._watchdogArmed) return;
-    this._watchdogArmed = true;
-    this._watchdogTimer = setTimeout(() => {
-      if (this.isInitialized) return;
-      let n = 0;
-      try {
-        n = parseInt(sessionStorage.getItem('tudien_init_reloads') || '0', 10) || 0;
-      } catch (_) {}
-      if (n < 2) {
-        try {
-          sessionStorage.setItem('tudien_init_reloads', String(n + 1));
-        } catch (_) {}
-        window.location.reload();
-      }
-    }, 15000);
   }
 
   async _healServiceWorker() {
@@ -539,9 +518,11 @@ class DictionaryService {
   }
 
   async initializeWeb() {
-    // Ensure the page is controlled by the SW so the cached .wasm/.db assets
-    // are served (offline). Without this, a cold launch hits the dead network
-    // and hangs on the loading screen.
+    // Ensure the page is controlled by the SW so the cached .wasm assets are
+    // served (offline). Without this, a cold launch hits the dead network and
+    // hangs on the loading screen. (The DB itself is read from the IndexedDB
+    // local store first, so it no longer depends on SW control — see
+    // fetchDatabaseWithProgress.)
     await waitForServiceWorkerController();
 
     const asset = Asset.fromModule(DATABASE_ASSET);
@@ -552,7 +533,12 @@ class DictionaryService {
 
     const onProgress = this.onProgress;
     const { bytes, poisoned } = await fetchDatabaseWithProgress(uri, onProgress);
+    if (!bytes || bytes.length === 0) {
+      throw new Error('Database asset could not be loaded (empty response)');
+    }
     if (poisoned) {
+      // Drop the poisoned local copy so we don't keep serving it offline.
+      try { await deleteAsset(uri); } catch (_) {}
       throw new PoisonedAssetError(
         'Database response is HTML, not a SQLite file (poisoned cache)'
       );

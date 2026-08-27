@@ -21,7 +21,7 @@ const pwaDir = path.join(root, 'pwa');
 
 // Bump when the service worker logic changes so that every deploy produces a
 // new cache name, forcing old (possibly poisoned) caches to be discarded.
-const SW_VERSION = 3;
+const SW_VERSION = 5;
 
 const INJECT_START = '<!-- PWA-INJECT -->';
 const INJECT_END = '<!-- /PWA-INJECT -->';
@@ -160,28 +160,47 @@ function buildInjectBlock() {
     '<link rel="apple-touch-icon" href="/icons/apple-touch-icon-v2.png" />',
     '<script>',
     "if ('serviceWorker' in navigator) {",
-    "  navigator.serviceWorker.register('/sw.js').then(function () {",
-    "    // On iOS a standalone PWA is often NOT controlled by the SW on its",
-    "    // very first page load, so cached .wasm/.db assets fall through to",
-    "    // the (offline) network and initialization hangs. Once the SW claims",
-    "    // this client, reload once so the now-controlled page is served those",
-    "    // assets from the SW cache. A bounded retry guards the case where the",
-    "    // controllerchange event never fires.",
-    "    if (!navigator.serviceWorker.controller) {",
-    "      var reloads = 0;",
-    "      try { reloads = parseInt(sessionStorage.getItem('tudien_sw_reloads') || '0', 10) || 0; } catch (e) {}",
-    "      if (reloads < 2) {",
+    "  window.addEventListener('load', function () {",
+    "    navigator.serviceWorker.register('/sw.js').then(function () {",
+    "      // On iOS a standalone PWA is sometimes NOT controlled by the SW on its",
+    "      // very first page load, so cached .wasm/.db assets would otherwise fall",
+    "      // through to the (offline) network and init hangs. Once the SW claims",
+    "      // this client we reload ONCE so the now-controlled page gets those",
+    "      // assets from the SW cache. The reload is offline-safe: navigation is",
+    "      // cache-first (see sw-source.js), so it paints instantly even with no",
+    "      // connectivity, and we only reload if the cached shell actually exists.",
+    "      if (!navigator.serviceWorker.controller) {",
     "        var fired = false;",
     "        var go = function () {",
     "          if (fired) return; fired = true;",
-    "          try { sessionStorage.setItem('tudien_sw_reloads', String(reloads + 1)); } catch (e) {}",
-    "          window.location.reload();",
+    "          var doReload = function () {",
+    "            if (!sessionStorage.getItem('tudien_sw_reloaded')) {",
+    "              try { sessionStorage.setItem('tudien_sw_reloaded', '1'); } catch (e) {}",
+    "              window.location.reload();",
+    "            }",
+    "          };",
+    "          if ('caches' in window) {",
+    "            caches.match('/index.html').then(function (c) { if (c) doReload(); }).catch(function () {});",
+    "          } else {",
+    "            doReload();",
+    "          }",
     "        };",
     "        navigator.serviceWorker.addEventListener('controllerchange', go);",
-    "        setTimeout(go, 3000);",
+    "        setTimeout(go, 2500);",
     "      }",
-    "    }",
-    "  }).catch(function () {});",
+    "    }).catch(function () {});",
+    "",
+    "    // Ask the SW to look for a new version on load and when the tab becomes",
+    "    // visible / the network reconnects. appUpdate.js performs the version",
+    "    // comparison and the (online-only) silent reload.",
+    "    var checkUpdate = function () {",
+    "      if (navigator.serviceWorker.controller) {",
+    "        navigator.serviceWorker.ready.then(function (reg) { reg.update(); });",
+    "      }",
+    "    };",
+    "    document.addEventListener('visibilitychange', function () { if (!document.hidden) checkUpdate(); });",
+    "    window.addEventListener('online', checkUpdate);",
+    "  });",
     '}',
     '</script>',
     INJECT_END,
@@ -233,6 +252,29 @@ function main() {
   // never deploy an app that fails to load its database.
   assertCriticalAssets();
 
+  // Emit app-version.json for the silent auto-update check (Phase 2). It
+  // records the build version, the dictionary DB's content hash (so a new
+  // dictionary release is detectable) and the SW cache name. Served no-cache so
+  // the updater always reads the freshest deployed copy.
+  const versionFiles = walk(dist);
+  const dbFile = versionFiles.find((f) => f.endsWith('.db'));
+  let dbSha = '';
+  if (dbFile) {
+    const buf = fs.readFileSync(path.join(dist, dbFile));
+    dbSha = crypto.createHash('sha256').update(buf).digest('hex').slice(0, 16);
+  }
+  const appVersion = {
+    version: require('../package.json').version,
+    dbHash: dbSha,
+    dbUrl: dbFile ? '/' + dbFile : '',
+    swCache: undefined, // filled in after the cache name is computed below
+    timestamp: new Date().toISOString(),
+  };
+  fs.writeFileSync(
+    path.join(dist, 'app-version.json'),
+    JSON.stringify(appVersion, null, 2)
+  );
+
   // Collect precache URLs from everything currently in dist/ except runtime files.
   const files = walk(dist).filter(
     (rel) => rel !== 'sw.js' && rel !== '_headers' && rel !== 'manifest.webmanifest'
@@ -263,6 +305,14 @@ function main() {
     hash.update('\n');
   }
   const cacheName = `tuidiendainam-v${SW_VERSION}-${hash.digest('hex').slice(0, 12)}`;
+
+  // Record the resolved SW cache name in app-version.json so the updater can
+  // detect when a new build (new cache name) has been deployed.
+  appVersion.swCache = cacheName;
+  fs.writeFileSync(
+    path.join(dist, 'app-version.json'),
+    JSON.stringify(appVersion, null, 2)
+  );
 
   // Generate dist/sw.js
   const swSource = fs.readFileSync(path.join(pwaDir, 'sw-source.js'), 'utf8');

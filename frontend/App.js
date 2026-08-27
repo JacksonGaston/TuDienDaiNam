@@ -1,12 +1,17 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Provider } from 'react-redux';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
 import { store } from './src/store/store';
 import { LanguageProvider } from './src/i18n/LanguageContext';
 import AppNavigator from './src/navigation/AppNavigator';
+import { registerAppUpdater } from './src/web/appUpdate';
 
 export default function App() {
+  useEffect(() => {
+    registerAppUpdater();
+  }, []);
+
   return (
     <Provider store={store}>
       <LanguageProvider>
