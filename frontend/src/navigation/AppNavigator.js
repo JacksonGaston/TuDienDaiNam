@@ -1,4 +1,5 @@
 import React from 'react';
+import { Platform } from 'react-native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { useTranslation } from '../i18n/LanguageContext';
 import HomeScreen from '../screens/HomeScreen';
@@ -22,6 +23,7 @@ const AppNavigator = () => {
           fontWeight: '600',
         },
         headerBackTitleVisible: false,
+        headerMode: Platform.OS === 'web' ? 'float' : undefined,
       }}
     >
       <Stack.Screen
