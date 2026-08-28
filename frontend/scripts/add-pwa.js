@@ -243,6 +243,7 @@ function main() {
     path.join(dist, 'manifest.webmanifest')
   );
   fs.copyFileSync(path.join(pwaDir, '_headers'), path.join(dist, '_headers'));
+  fs.copyFileSync(path.join(pwaDir, '_redirects'), path.join(dist, '_redirects'));
   fs.cpSync(path.join(pwaDir, 'icons'), path.join(dist, 'icons'), { recursive: true });
 
   // Move node_modules assets out of the excluded path before building precache.
@@ -277,7 +278,7 @@ function main() {
 
   // Collect precache URLs from everything currently in dist/ except runtime files.
   const files = walk(dist).filter(
-    (rel) => rel !== 'sw.js' && rel !== '_headers' && rel !== 'manifest.webmanifest'
+    (rel) => rel !== 'sw.js' && rel !== '_headers' && rel !== '_redirects' && rel !== 'manifest.webmanifest'
   );
   // Never precache the dictionary database. It is 13MB+ and the app fetches it
   // at runtime anyway (and the SW's /assets/ cache-first handler caches it after

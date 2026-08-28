@@ -7,6 +7,7 @@ import {
   ScrollView,
   ActivityIndicator,
   Linking,
+  Image,
 } from 'react-native';
 import { dictionaryService } from '../services/dictionaryService';
 import { useTranslation } from '../i18n/LanguageContext';
@@ -92,6 +93,11 @@ const HomeScreen = ({ navigation }) => {
       <View style={styles.header}>
         <Text style={styles.title}>{t('appName')}</Text>
         <Text style={styles.subtitle}>{t('offlineDainameseDictionary')}</Text>
+        <Image
+          source={require('../../assets/Flag_CochinChine.png')}
+          style={styles.flagImage}
+          resizeMode="contain"
+        />
         <TouchableOpacity onPress={toggleLanguage} style={styles.langToggle}>
           <Text style={styles.langToggleText}>
             {language === 'en' ? 'DN' : 'EN'}
@@ -200,7 +206,14 @@ const styles = StyleSheet.create({
     color: 'rgba(255, 255, 255, 0.9)',
     marginBottom: 8,
   },
+  flagImage: {
+    width: 54,
+    height: 36,
+  },
   langToggle: {
+    position: 'absolute',
+    right: 16,
+    bottom: 16,
     backgroundColor: 'rgba(255,255,255,0.25)',
     paddingHorizontal: 16,
     paddingVertical: 6,

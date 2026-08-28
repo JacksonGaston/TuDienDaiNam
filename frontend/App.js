@@ -10,6 +10,19 @@ import { registerAppUpdater } from './src/web/appUpdate';
 
 const navigationRef = createNavigationContainerRef();
 
+const linking = {
+  config: {
+    screens: {
+      Home: '',
+      Search: 'search',
+      WordDetail: {
+        path: 'word/:wordId',
+        parse: { wordId: Number },
+      },
+    },
+  },
+};
+
 export default function App() {
   useEffect(() => {
     registerAppUpdater();
@@ -32,7 +45,7 @@ export default function App() {
     <Provider store={store}>
       <LanguageProvider>
         <SafeAreaProvider>
-          <NavigationContainer ref={navigationRef}>
+          <NavigationContainer ref={navigationRef} linking={linking}>
             <AppNavigator />
           </NavigationContainer>
         </SafeAreaProvider>
