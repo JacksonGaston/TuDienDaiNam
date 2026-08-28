@@ -1,12 +1,11 @@
 import React from 'react';
-import { Platform } from 'react-native';
-import { createStackNavigator } from '@react-navigation/stack';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useTranslation } from '../i18n/LanguageContext';
 import HomeScreen from '../screens/HomeScreen';
 import SearchScreen from '../screens/SearchScreen';
 import WordDetailScreen from '../screens/WordDetailScreen';
 
-const Stack = createStackNavigator();
+const Stack = createNativeStackNavigator();
 
 const AppNavigator = () => {
   const { t } = useTranslation();
@@ -23,7 +22,6 @@ const AppNavigator = () => {
           fontWeight: '600',
         },
         headerBackTitleVisible: false,
-        headerMode: Platform.OS === 'web' ? 'float' : undefined,
       }}
     >
       <Stack.Screen
