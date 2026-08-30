@@ -1,0 +1,22 @@
+{
+  "name": "tuidiendainam-backend",
+  "version": "1.0.0",
+  "description": "Text processing pipeline for Dainamese dictionary files",
+  "main": "index.js",
+  "scripts": {
+    "build-db": "node src/database/generate-db.js"
+  },
+  "keywords": [
+    "dictionary",
+    "dainamese",
+    "text-processing",
+    "database"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "fs-extra": "^11.3.2",
+    "path": "^0.12.7",
+    "sqlite3": "^5.1.7"
+  }
+}
