@@ -8,6 +8,11 @@ const DatabaseSeeder = require('./seeder');
 const TextParser = require('../parser/text-parser');
 const EntryValidator = require('../parser/entry-validator');
 
+// Must stay in sync with DICTIONARY_DB_VERSION in
+// frontend/src/services/dictionaryService.js. Bump on every data-relevant
+// rebuild so the web app detects stale cached databases and re-fetches them.
+const DICTIONARY_DB_VERSION = 2;
+
 class DatabaseGenerator {
   constructor() {
     this.dbPath = path.join(__dirname, '../../frontend/assets/database/dictionary.db');
@@ -77,6 +82,10 @@ class DatabaseGenerator {
       await this.seeder.generateRelatedWords(this.db);
 
       await this.seeder.updateSearchIndex(this.db);
+
+      // Stamp the build version into the SQLite file so clients can detect and
+      // refresh stale locally-cached copies of the database.
+      await this.runQuery(`PRAGMA user_version = ${DICTIONARY_DB_VERSION}`);
       
       if (options.optimize !== false) {
         await this.schema.optimizeDatabase(this.db);

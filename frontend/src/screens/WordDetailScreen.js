@@ -82,56 +82,109 @@ const WordDetailScreen = ({ route, navigation }) => {
     );
   }
 
+  // Each meaning block carries its own ancient char, word type and meaning.
+  // Fall back to the word-level fields when blocks are missing (older DBs).
+  const meaningBlocks =
+    currentWord.meaningBlocks && currentWord.meaningBlocks.length > 0
+      ? currentWord.meaningBlocks
+      : currentWord.meaning
+        ? [{
+            meaning: currentWord.meaning,
+            ancientChar: currentWord.ancientChar || '',
+            wordType: currentWord.wordType || '',
+            blockIndex: 0,
+          }]
+        : [];
+
+  // blockIndex -> list of compound items, so blocks without any compounds
+  // can still be rendered with their meaning header.
+  const compoundsByBlock = {};
+  for (const block of currentWord.compounds || []) {
+    compoundsByBlock[block.blockIndex] = block.compounds || [];
+  }
+
+  // Only fall back to the word-level type for legacy data where the meaning
+  // blocks carry no per-block type at all. When per-block types exist, trust
+  // them exactly — a block may legitimately have no type (e.g. stub entries
+  // like "Bàng c." vs the primary entry's "c. n.").
+  const wordHasPerBlockTypes = meaningBlocks.some(
+    (b) => b.wordType != null && b.wordType !== ''
+  );
+  const getBlockWordType = (block) => {
+    const blockType = block && block.wordType != null ? block.wordType : '';
+    if (!wordHasPerBlockTypes && !blockType) return currentWord.wordType || '';
+    return blockType;
+  };
+
+  const hasCompounds =
+    currentWord.compounds && currentWord.compounds.length > 0;
+
   return (
     <ScrollView style={styles.container}>
       <View style={styles.header}>
-        <View style={styles.wordHeader}>
-          {currentWord.ancientChar ? (
-            <Text style={styles.ancientChar}>{currentWord.ancientChar}</Text>
-          ) : null}
-          <Text style={styles.word}>{currentWord.word}</Text>
-        </View>
-
-        {currentWord.pronunciation && (
+        <Text style={styles.word}>{currentWord.word}</Text>
+        {currentWord.pronunciation ? (
           <Text style={styles.pronunciation}>[{currentWord.pronunciation}]</Text>
-        )}
-
-        {currentWord.wordType && (
-          <Text style={styles.wordType}>({currentWord.wordType})</Text>
-        )}
+        ) : null}
       </View>
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>{t('meaning')}</Text>
-        <Text style={styles.definition}>{currentWord.meaning}</Text>
+        {meaningBlocks.map((block, index) => (
+          <View key={`meaning-${index}`} style={styles.meaningItem}>
+            <View style={styles.meaningItemHeader}>
+              <Text style={styles.meaningNumber}>{index + 1}.</Text>
+              {block.ancientChar ? (
+                <Text style={styles.ancientCharInline}>{block.ancientChar}</Text>
+              ) : null}
+              {getBlockWordType(block) ? (
+                <Text style={styles.wordTypeInline}>({getBlockWordType(block)})</Text>
+              ) : null}
+            </View>
+            {block.meaning ? (
+              <Text style={styles.definition}>{block.meaning}</Text>
+            ) : null}
+          </View>
+        ))}
       </View>
 
-      {currentWord.compounds && currentWord.compounds.length > 0 && (
+      {hasCompounds && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{t('compounds')}</Text>
-          {currentWord.compounds.map((block, blockIndex) => (
-            <View key={`block-${blockIndex}`} style={styles.compoundBlock}>
-              {block.meaning && currentWord.compounds.length > 1 ? (
+          {meaningBlocks.map((block, index) => {
+            const compounds = compoundsByBlock[block.blockIndex] || [];
+            return (
+              <View key={`block-${index}`} style={styles.compoundBlock}>
                 <View style={styles.compoundBlockHeader}>
+                  <Text style={styles.compoundBlockNumber}>{index + 1}.</Text>
                   {block.ancientChar ? (
                     <Text style={styles.compoundBlockAncientChar}>{block.ancientChar}</Text>
                   ) : null}
+                  {getBlockWordType(block) ? (
+                    <Text style={styles.compoundBlockType}>({getBlockWordType(block)})</Text>
+                  ) : null}
                   <Text style={styles.compoundBlockMeaning}>{block.meaning}</Text>
                 </View>
-              ) : null}
-              {block.compounds.map((item, i) => (
-                <View key={`compound-${blockIndex}-${i}`} style={styles.exampleItem}>
-                  <View style={styles.compoundRow}>
-                    {item.ancientChars ? (
-                      <Text style={styles.compoundAncientChar}>{item.ancientChars}</Text>
-                    ) : null}
-                    <Text style={styles.compoundText}>{item.compound}</Text>
-                  </View>
-                  {item.meaning ? <Text style={styles.exampleText}> — {item.meaning}</Text> : null}
-                </View>
-              ))}
-            </View>
-          ))}
+                {compounds.length > 0 ? (
+                  compounds.map((item, i) => (
+                    <View key={`compound-${index}-${i}`} style={styles.exampleItem}>
+                      <View style={styles.compoundRow}>
+                        {item.ancientChars ? (
+                          <Text style={styles.compoundAncientChar}>{item.ancientChars}</Text>
+                        ) : null}
+                        <Text style={styles.compoundText}>{item.compound}</Text>
+                      </View>
+                      {item.meaning ? (
+                        <Text style={styles.exampleText}> — {item.meaning}</Text>
+                      ) : null}
+                    </View>
+                  ))
+                ) : (
+                  <Text style={styles.noCompounds}>{t('noCompounds')}</Text>
+                )}
+              </View>
+            );
+          })}
         </View>
       )}
 
@@ -230,32 +283,16 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#e9ecef',
   },
-  wordHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  ancientChar: {
-    fontSize: 24,
-    color: '#6c757d',
-    marginRight: 8,
-    fontFamily: 'serif',
-  },
   word: {
     fontSize: 32,
     fontWeight: '700',
     color: '#212529',
-    flex: 1,
   },
   pronunciation: {
     fontSize: 18,
     color: '#6c757d',
     fontStyle: 'italic',
-    marginBottom: 4,
-  },
-  wordType: {
-    fontSize: 16,
-    color: '#6c757d',
+    marginTop: 4,
   },
   section: {
     padding: 20,
@@ -268,10 +305,38 @@ const styles = StyleSheet.create({
     color: '#495057',
     marginBottom: 12,
   },
+  meaningItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  meaningItemHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  meaningNumber: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#495057',
+    marginRight: 6,
+  },
+  ancientCharInline: {
+    fontSize: 16,
+    color: '#6c757d',
+    marginRight: 6,
+    fontFamily: 'serif',
+  },
+  wordTypeInline: {
+    fontSize: 15,
+    color: '#6c757d',
+    marginRight: 6,
+  },
   definition: {
     fontSize: 16,
     lineHeight: 24,
     color: '#212529',
+    flex: 1,
   },
   compoundBlock: { marginBottom: 12 },
   compoundBlockHeader: {
@@ -282,8 +347,10 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#e0e0e0',
   },
+  compoundBlockNumber: { fontSize: 14, fontWeight: '600', color: '#495057', marginRight: 6 },
   compoundBlockAncientChar: { fontSize: 14, color: '#6c757d', marginRight: 6, fontFamily: 'serif' },
-  compoundBlockMeaning: { fontSize: 14, color: '#495057', fontStyle: 'italic' },
+  compoundBlockType: { fontSize: 13, color: '#6c757d', marginRight: 6 },
+  compoundBlockMeaning: { fontSize: 14, color: '#495057', fontStyle: 'italic', flex: 1 },
   compoundRow: { flexDirection: 'row', alignItems: 'center' },
   compoundAncientChar: { fontSize: 13, color: '#6c757d', marginRight: 6, fontFamily: 'serif' },
   compoundText: {
@@ -303,6 +370,12 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     color: '#495057',
     fontStyle: 'italic',
+  },
+  noCompounds: {
+    fontSize: 14,
+    fontStyle: 'italic',
+    color: '#adb5bd',
+    paddingVertical: 4,
   },
   metadataSection: {
     padding: 20,

@@ -153,39 +153,85 @@ const SearchScreen = ({ navigation }) => {
             activeOpacity={0.7}
             onPress={() => handleResultPress(match)}
           >
-            <View style={styles.matchHeader}>
-              {match.ancientChar ? (
-                <Text style={styles.matchAncientChar}>{match.ancientChar}</Text>
-              ) : null}
-              <Text style={styles.matchWord}>{match.word}</Text>
-            </View>
+            <Text style={styles.matchWord}>{match.word}</Text>
             {match.pronunciation ? (
               <Text style={styles.matchPronunciation}>[{match.pronunciation}]</Text>
             ) : null}
-            <Text style={styles.matchType}>{match.wordType}</Text>
-            <Text style={styles.matchMeaning}>{match.meaning}</Text>
-            {match.compounds && match.compounds.length > 0 && (
-              <View style={styles.compoundsSection}>
-                <Text style={styles.sectionTitle}>{t('compounds')}</Text>
-                {match.compounds.map((block, blockIdx) => (
-                  <View key={`block-${blockIdx}`} style={styles.compoundBlock}>
-                    {block.meaning && match.compounds.length > 1 ? (
-                      <View style={styles.compoundBlockHeader}>
+
+            {(() => {
+              const meaningBlocks =
+                match.meaningBlocks && match.meaningBlocks.length > 0
+                  ? match.meaningBlocks
+                  : match.meaning
+                    ? [{ meaning: match.meaning, ancientChar: match.ancientChar || '', wordType: match.wordType || '', blockIndex: 0 }]
+                    : [];
+              const compoundsByBlock = {};
+              for (const block of match.compounds || []) {
+                compoundsByBlock[block.blockIndex] = block.compounds || [];
+              }
+              const wordHasPerBlockTypes = meaningBlocks.some(
+                (b) => b.wordType != null && b.wordType !== ''
+              );
+              const blockWordType = (block) => {
+                const blockType = block && block.wordType != null ? block.wordType : '';
+                if (!wordHasPerBlockTypes && !blockType) return match.wordType || '';
+                return blockType;
+              };
+              return (
+                <>
+                  <Text style={styles.sectionTitle}>{t('meaning')}</Text>
+                  {meaningBlocks.map((block, idx) => (
+                    <View key={`m-${idx}`} style={styles.matchMeaningRow}>
+                      <View style={styles.matchMeaningHeader}>
+                        <Text style={styles.matchMeaningNumber}>{idx + 1}.</Text>
                         {block.ancientChar ? (
-                          <Text style={styles.compoundBlockAncientChar}>{block.ancientChar}</Text>
+                          <Text style={styles.matchAncientChar}>{block.ancientChar}</Text>
                         ) : null}
-                        <Text style={styles.compoundBlockMeaning}>{block.meaning}</Text>
+                        {blockWordType(block) ? (
+                          <Text style={styles.matchType}>({blockWordType(block)})</Text>
+                        ) : null}
                       </View>
-                    ) : null}
-                    {block.compounds.map((item, i) => (
-                      <View key={`compound-${blockIdx}-${i}`}>
-                        {renderCompound(item)}
-                      </View>
-                    ))}
-                  </View>
-                ))}
-              </View>
-            )}
+                      {block.meaning ? (
+                        <Text style={styles.matchMeaning}>{block.meaning}</Text>
+                      ) : null}
+                    </View>
+                  ))}
+
+                  {match.compounds && match.compounds.length > 0 && (
+                    <View style={styles.compoundsSection}>
+                      <Text style={styles.sectionTitle}>{t('compounds')}</Text>
+                      {meaningBlocks.map((block, blockIdx) => {
+                        const comps = compoundsByBlock[block.blockIndex] || [];
+                        return (
+                          <View key={`block-${blockIdx}`} style={styles.compoundBlock}>
+                            <View style={styles.compoundBlockHeader}>
+                              <Text style={styles.compoundBlockNumber}>{blockIdx + 1}.</Text>
+                              {block.ancientChar ? (
+                                <Text style={styles.compoundBlockAncientChar}>{block.ancientChar}</Text>
+                              ) : null}
+                              {blockWordType(block) ? (
+                                <Text style={styles.compoundBlockType}>({blockWordType(block)})</Text>
+                              ) : null}
+                              <Text style={styles.compoundBlockMeaning}>{block.meaning}</Text>
+                            </View>
+                            {comps.length > 0 ? (
+                              comps.map((item, i) => (
+                                <View key={`compound-${blockIdx}-${i}`}>
+                                  {renderCompound(item)}
+                                </View>
+                              ))
+                            ) : (
+                              <Text style={styles.noCompounds}>{t('noCompounds')}</Text>
+                            )}
+                          </View>
+                        );
+                      })}
+                    </View>
+                  )}
+                </>
+              );
+            })()}
+
             <Text style={styles.matchDetailHint}>{t('tapForFullEntry')}</Text>
           </TouchableOpacity>
 
@@ -269,12 +315,14 @@ const styles = StyleSheet.create({
   resultsContainer: { flex: 1, backgroundColor: '#fff' },
   matchCard: { padding: 20, borderBottomWidth: 1, borderBottomColor: '#e0e0e0' },
   matchDetailHint: { marginTop: 12, fontSize: 14, color: '#007AFF', fontWeight: '600' },
-  matchHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
-  matchAncientChar: { fontSize: 24, color: '#6c757d', marginRight: 8, fontFamily: 'serif' },
-  matchWord: { fontSize: 32, fontWeight: '700', color: '#212529', flex: 1 },
-  matchPronunciation: { fontSize: 18, color: '#6c757d', fontStyle: 'italic', marginBottom: 4 },
-  matchType: { fontSize: 16, color: '#6c757d', marginBottom: 8 },
-  matchMeaning: { fontSize: 16, lineHeight: 24, color: '#212549', marginBottom: 12 },
+  matchWord: { fontSize: 32, fontWeight: '700', color: '#212529' },
+  matchPronunciation: { fontSize: 18, color: '#6c757d', fontStyle: 'italic', marginBottom: 12 },
+  matchMeaningRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 8 },
+  matchMeaningHeader: { flexDirection: 'row', alignItems: 'center', marginRight: 8 },
+  matchMeaningNumber: { fontSize: 15, fontWeight: '600', color: '#495057', marginRight: 6 },
+  matchAncientChar: { fontSize: 15, color: '#6c757d', marginRight: 6, fontFamily: 'serif' },
+  matchType: { fontSize: 14, color: '#6c757d', marginRight: 6 },
+  matchMeaning: { fontSize: 16, lineHeight: 22, color: '#212549', flex: 1, marginBottom: 8 },
   sectionTitle: { fontSize: 18, fontWeight: '600', color: '#495057', marginBottom: 12 },
   compoundsSection: { marginTop: 8 },
   compoundBlock: { marginBottom: 12 },
@@ -286,12 +334,15 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#e0e0e0',
   },
+  compoundBlockNumber: { fontSize: 14, fontWeight: '600', color: '#495057', marginRight: 6 },
   compoundBlockAncientChar: { fontSize: 14, color: '#6c757d', marginRight: 6, fontFamily: 'serif' },
-  compoundBlockMeaning: { fontSize: 14, color: '#495057', fontStyle: 'italic' },
+  compoundBlockType: { fontSize: 13, color: '#6c757d', marginRight: 6 },
+  compoundBlockMeaning: { fontSize: 14, color: '#495057', fontStyle: 'italic', flex: 1 },
   compoundItem: { paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: '#f5f5f5' },
   compoundAncientChar: { fontSize: 13, color: '#6c757d', marginRight: 6, fontFamily: 'serif' },
   compoundText: { fontSize: 15, color: '#212549', fontWeight: '600' },
   compoundMeaning: { fontSize: 14, color: '#495057' },
+  noCompounds: { fontSize: 13, fontStyle: 'italic', color: '#adb5bd', paddingVertical: 4 },
   relatedSection: { padding: 16, borderBottomWidth: 1, borderBottomColor: '#e0e0e0' },
   relatedItem: {
     backgroundColor: '#f8f9fa',

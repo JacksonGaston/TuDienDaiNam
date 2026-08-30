@@ -11,6 +11,14 @@ import { getAssetBytes, setAssetBytes, deleteAsset } from '../web/localAssetCach
 const DATABASE_ASSET = require('../../assets/database/dictionary.db');
 const DB_NAME = 'dictionary.db';
 
+// Version stamped into the SQLite file (PRAGMA user_version) when the DB is
+// generated (src/database/generate-db.js). The web loader checks the cached
+// copy against this number and re-fetches once when the local cache is stale
+// — in dev mode the asset URL is not content-hashed, so a rebuilt dictionary.db
+// would otherwise be served from IndexedDB/service-worker forever. Bump BOTH
+// this constant and the generator's pragma on every data-relevant rebuild.
+const DICTIONARY_DB_VERSION = 2;
+
 // Thrown when a critical binary asset (DB/WASM) was served as an HTML error
 // page — i.e. a poisoned cache from a previous broken deploy. This is the only
 // failure mode that should trigger the service-worker heal + reload.
@@ -59,19 +67,23 @@ async function fetchDatabaseWithProgress(uri, onProgress) {
   };
 
   // 1) Local IndexedDB store — instant, offline-first, no re-download.
-  try {
-    const local = await getAssetBytes(uri);
-    if (local && local.byteLength > 0) {
-      report(local.byteLength, local.byteLength);
-      return { bytes: local, poisoned: false, source: 'idb' };
+  // Skipped in dev: the dev asset URL is not content-hashed, so a rebuilt
+  // database would otherwise forever be masked by the stale cached bytes.
+  if (typeof __DEV__ === 'undefined' || !__DEV__) {
+    try {
+      const local = await getAssetBytes(uri);
+      if (local && local.byteLength > 0) {
+        report(local.byteLength, local.byteLength);
+        return { bytes: local, poisoned: false, source: 'idb' };
+      }
+    } catch (_) {
+      /* fall through to cache/network */
     }
-  } catch (_) {
-    /* fall through to cache/network */
   }
 
   // Stream a fetch response into a single Uint8Array, reporting progress as we go.
   const streamFetch = async (opts) => {
-    const res = await fetch(uri, opts);
+    const res = await fetch(uri, { cache: 'reload', ...opts });
     if (!res.ok) return null;
     if (!res.body || !res.body.getReader) {
       // Environment without a readable stream (rare) — one-shot read, no progress.
@@ -123,6 +135,22 @@ async function fetchDatabaseWithProgress(uri, onProgress) {
     setAssetBytes(uri, result.bytes).catch(() => {});
   }
   return result;
+}
+
+
+// Discard every locally cached copy of the database (IndexedDB store and any
+// service-worker cache entries) so the next fetch has to come from the network.
+async function dropCachedAsset(uri) {
+  try { await deleteAsset(uri); } catch (_) {}
+  if (typeof caches !== 'undefined') {
+    try {
+      const names = await caches.keys();
+      for (const name of names) {
+        const cache = await caches.open(name);
+        await cache.delete(uri, { ignoreSearch: true });
+      }
+    } catch (_) {}
+  }
 }
 
 
@@ -329,7 +357,7 @@ class DictionaryService {
     for (const r of rows) {
       const idx = r.blockIndex != null ? r.blockIndex : 0;
       if (!blockMap.has(idx)) {
-        blockMap.set(idx, { blockIndex: idx, meaning: '', ancientChar: '', compounds: [] });
+        blockMap.set(idx, { blockIndex: idx, meaning: '', ancientChar: '', wordType: '', compounds: [] });
       }
       blockMap.get(idx).compounds.push({
         compound: r.compound,
@@ -342,6 +370,7 @@ class DictionaryService {
       if (mb) {
         block.meaning = mb.meaning || '';
         block.ancientChar = mb.ancientChar || '';
+        block.wordType = mb.wordType || '';
       }
     }
     if (blockMap.size === 0 && meaningBlocks.length > 0) {
@@ -350,6 +379,7 @@ class DictionaryService {
           blockIndex: mb.blockIndex || 0,
           meaning: mb.meaning || '',
           ancientChar: mb.ancientChar || '',
+          wordType: mb.wordType || '',
           compounds: []
         });
       }
@@ -532,7 +562,7 @@ class DictionaryService {
     }
 
     const onProgress = this.onProgress;
-    const { bytes, poisoned } = await fetchDatabaseWithProgress(uri, onProgress);
+    const { bytes, poisoned, source } = await fetchDatabaseWithProgress(uri, onProgress);
     if (!bytes || bytes.length === 0) {
       throw new Error('Database asset could not be loaded (empty response)');
     }
@@ -552,6 +582,36 @@ class DictionaryService {
     if (!result || result.count === 0) {
       throw new Error('Database is empty after web deserialization');
     }
+
+    // Stale-cache refresh: a locally cached copy from an older dictionary build
+    // (e.g. dev-mode URL is not content-hashed, or a previously deployed hashed
+    // URL collided) must not replace real data. Drop it and re-fetch once from
+    // the network; if that also fails we keep the stale copy rather than break.
+    if (source === 'idb' || source === 'cache') {
+      let dbVersion = 0;
+      try {
+        const vr = await this.db.getFirstAsync('PRAGMA user_version');
+        dbVersion = vr && vr.user_version != null ? Number(vr.user_version) : 0;
+      } catch (_) {}
+      if (dbVersion < DICTIONARY_DB_VERSION) {
+        await dropCachedAsset(uri);
+        const fresh = await fetchDatabaseWithProgress(uri, onProgress);
+        if (fresh && fresh.bytes && fresh.bytes.length > 0 && !fresh.poisoned) {
+          try {
+            const freshDb = await deserializeDatabaseAsync(fresh.bytes);
+            const freshResult = await freshDb.getFirstAsync('SELECT COUNT(*) as count FROM words');
+            if (freshResult && freshResult.count > 0) {
+              this.db = freshDb;
+            } else {
+              freshDb.closeAsync().catch(() => {});
+            }
+          } catch (_) {
+            /* keep the stale-but-working copy */
+          }
+        }
+      }
+    }
+
     this.isInitialized = true;
   }
 

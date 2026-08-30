@@ -84,7 +84,8 @@ class TextParser {
         const meaningBlocks = [{
           meaning: entry.meaning || '',
           ancientChar: entry.ancientChar || '',
-          blockIndex: 0
+          blockIndex: 0,
+          wordType: entry.wordType || ''
         }];
         merged.push(this.finalizeEntry({
           ...entry,
@@ -114,7 +115,8 @@ class TextParser {
         meaningBlocks.push({
           meaning: (e.meaning || '').trim(),
           ancientChar: (e.ancientChar || '').trim(),
-          blockIndex: i
+          blockIndex: i,
+          wordType: e.wordType || ''
         });
         for (const c of (e.compounds || [])) {
           allCompounds.push({ ...c, blockIndex: i });
@@ -230,9 +232,13 @@ class TextParser {
         rest = rest.substring(pronMatch[0].length).trim();
       }
 
+      // Word types in this dictionary are only the abbreviations c. (chữ) and
+      // n. — possibly repeated, e.g. "c. n.". A bare "c."/"n." token can also
+      // appear at end-of-line (meaning omitted), and must still be captured as
+      // a type token instead of falling through into the meaning text.
       const typeTokens = [];
       let m;
-      const localType = /^([a-zA-ZÀ-ỹ]{1,5})\.\s+/g;
+      const localType = /^([cCnN])\.(?:\s+|$)/g;
       while ((m = localType.exec(rest)) !== null) {
         if (m.index === 0 || rest[m.index - 1] === ' ') {
           typeTokens.push(m[1]);
