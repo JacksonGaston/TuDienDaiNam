@@ -1,19 +1,60 @@
-const logger = require('../utils/logger');
-const DainameseNormalizer = require('./dainamese-normalizer');
+const logger = require("../utils/logger");
+const DainameseNormalizer = require("./dainamese-normalizer");
 
 const DASH_TOKENS = /[—―]|--/g;
 const HAS_DASH_RE = /[—―]|--/;
-const MARKER_START_RE = /^[|{}#\[\]]/;
+const MARKER_START_RE = /^[|{}#[\]]/;
 const DASH_START_RE = /^[—―-]/;
-const ANCESTOR_PREFIX_RE = /^([\u3000-\u303F\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF\uE000-\uF8FF\u{20000}-\u{2FA1F}\s\|]*)/u;
-const VIET_LETTER = '[a-zA-ZÀ-ỹ]';
-const VIET_WORD = '[a-zA-ZÀ-ỹ][a-zA-ZÀ-ỹ\\s\\-]*';
-const WORD_PERIOD_RE = new RegExp('^' + VIET_WORD + '\\.\\s', 'u');
-const WORD_PERIOD_END_RE = new RegExp('^' + VIET_WORD + '\\.\\s*$', 'u');
-const WORD_PERIOD_BARE_RE = new RegExp('^' + VIET_WORD + '\\.', 'u');
+const ANCESTOR_PREFIX_RE =
+  /^([\u3000-\u303F\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF\uE000-\uF8FF\u{20000}-\u{2FA1F}\s|]*)/u;
+const VIET_LETTER = "[a-zA-ZÀ-ỹ]";
+const VIET_WORD = "[a-zA-ZÀ-ỹ][a-zA-ZÀ-ỹ\\s\\-]*";
+// Allow parentheses and internal spaces in the headword, e.g. "Đậu (đỗ)."
+const VIET_WORD_WITH_PRON = "[a-zA-ZÀ-ỹ][a-zA-ZÀ-ỹ\\s\\-\\(\\)]*";
+const WORD_PERIOD_RE = new RegExp("^" + VIET_WORD_WITH_PRON + "\\.\\s", "u");
+const WORD_PERIOD_END_RE = new RegExp("^" + VIET_WORD + "\\.\\s*$", "u");
+const WORD_PERIOD_BARE_RE = new RegExp("^" + VIET_WORD + "\\.", "u");
 
 function stripToSingleDash(text) {
-  return text.replace(DASH_TOKENS, '—');
+  return text.replace(DASH_TOKENS, "—");
+}
+
+// Extract pronunciation from within the word field when it is wrapped in
+// parentheses, e.g. "Đậu (đỗ)" → { word: "Đậu", pronunciation: "đỗ" },
+// or with a comma variant like "Biêu, (tiêu)" → { word: "Biêu", pronunciation: "tiêu" }.
+// Returns { word, pronunciation } where pronunciation may be empty.
+function extractWordAndPronunciation(rawWord) {
+  let word = rawWord;
+  let pronunciation = "";
+
+  // Pattern 1: "Word (pronunciation)" at end — e.g. "Đậu (đỗ)"
+  // Must not match if parentheses contain a full sentence like "(Coi chữ ...)"
+  // which is a cross-reference, not a pronunciation.
+  // Use greedy (.+) so it captures everything before the last "(" in the string.
+  const parenMatch = rawWord.match(/^(.+)\s+\(([^)]+)\)\s*$/);
+  if (parenMatch) {
+    const inner = parenMatch[2].trim();
+    // Pronunciation is short (1-3 syllables). Long inner text is an annotation,
+    // not a pronunciation — leave it in the word field.
+    if (inner.length <= 12) {
+      word = parenMatch[1].replace(/[\s,]+$/, "").trim();
+      pronunciation = inner;
+    }
+  }
+
+  // Pattern 2: "Word, (alternative)" at end — e.g. "Biêu, (tiêu)"
+  if (!pronunciation) {
+    const commaMatch = rawWord.match(/^(.+),\s*\(([^)]+)\)\s*$/);
+    if (commaMatch) {
+      const inner = commaMatch[2].trim();
+      if (inner.length <= 12) {
+        word = commaMatch[1].replace(/[\s,]+$/, "").trim();
+        pronunciation = inner;
+      }
+    }
+  }
+
+  return { word, pronunciation };
 }
 
 class TextParser {
@@ -23,7 +64,7 @@ class TextParser {
 
   async parseTextFile(textFile) {
     if (!textFile || !textFile.content) {
-      throw new Error('Invalid text file provided');
+      throw new Error("Invalid text file provided");
     }
     await logger.info(`Parsing text file: ${textFile.filename}`);
     const entries = this.extractDictionaryEntries(textFile.content, textFile);
@@ -31,9 +72,11 @@ class TextParser {
       ...textFile,
       parsedEntries: entries,
       totalEntries: entries.length,
-      parsingTimestamp: new Date().toISOString()
+      parsingTimestamp: new Date().toISOString(),
     };
-    await logger.info(`Parsed ${entries.length} dictionary entries from ${textFile.filename}`);
+    await logger.info(
+      `Parsed ${entries.length} dictionary entries from ${textFile.filename}`,
+    );
     return parsedResult;
   }
 
@@ -51,7 +94,7 @@ class TextParser {
         currentBlock = { firstLine: line, continuationLines: [] };
       } else {
         if (!currentBlock) {
-          logger.warn('Parser: ignoring non-headword line before any block');
+          logger.warn("Parser: ignoring non-headword line before any block");
           continue;
         }
         currentBlock.continuationLines.push(line);
@@ -80,18 +123,26 @@ class TextParser {
       const group = groups.get(key);
       if (group.length === 1) {
         const entry = group[0];
-        const compounds = (entry.compounds || []).map(c => ({ ...c, blockIndex: 0 }));
-        const meaningBlocks = [{
-          meaning: entry.meaning || '',
-          ancientChar: entry.ancientChar || '',
+        const compounds = (entry.compounds || []).map((c) => ({
+          ...c,
           blockIndex: 0,
-          wordType: entry.wordType || ''
-        }];
-        merged.push(this.finalizeEntry({
-          ...entry,
-          compounds,
-          meaningBlocks
         }));
+        const meaningBlocks = [
+          {
+            meaning: entry.meaning || "",
+            ancientChar: entry.ancientChar || "",
+            blockIndex: 0,
+            wordType: entry.wordType || "",
+            synonym: entry.pronunciation || "",
+          },
+        ];
+        merged.push(
+          this.finalizeEntry({
+            ...entry,
+            compounds,
+            meaningBlocks,
+          }),
+        );
         continue;
       }
 
@@ -99,7 +150,7 @@ class TextParser {
       const meanings = [];
       const seenMeanings = new Set();
       for (const e of group) {
-        const m = (e.meaning || '').trim();
+        const m = (e.meaning || "").trim();
         if (m && !seenMeanings.has(m)) {
           seenMeanings.add(m);
           meanings.push(m);
@@ -113,15 +164,16 @@ class TextParser {
       for (let i = 0; i < group.length; i++) {
         const e = group[i];
         meaningBlocks.push({
-          meaning: (e.meaning || '').trim(),
-          ancientChar: (e.ancientChar || '').trim(),
+          meaning: (e.meaning || "").trim(),
+          ancientChar: (e.ancientChar || "").trim(),
           blockIndex: i,
-          wordType: e.wordType || ''
+          wordType: e.wordType || "",
+          synonym: e.pronunciation || "",
         });
-        for (const c of (e.compounds || [])) {
+        for (const c of e.compounds || []) {
           allCompounds.push({ ...c, blockIndex: i });
         }
-        const ch = (e.ancientChar || '').trim();
+        const ch = (e.ancientChar || "").trim();
         if (ch && !seenChars.has(ch)) {
           seenChars.add(ch);
           ancientChars.push(ch);
@@ -130,10 +182,10 @@ class TextParser {
 
       const mergedEntry = {
         ...primary,
-        meaning: meanings.join('\n'),
+        meaning: meanings.join("\n"),
         compounds: allCompounds,
         meaningBlocks: meaningBlocks,
-        ancientChar: ancientChars.join(' ')
+        ancientChar: ancientChars.join(" "),
       };
 
       merged.push(this.finalizeEntry(mergedEntry));
@@ -156,11 +208,11 @@ class TextParser {
     const ts = line.trimStart();
     if (MARKER_START_RE.test(ts)) return false;
     if (DASH_START_RE.test(ts)) return false;
-    const tab = line.indexOf('\t');
+    const tab = line.indexOf("\t");
     if (tab === -1) return false;
     const after = line.slice(tab + 1);
     if (!WORD_PERIOD_RE.test(after)) return false;
-    const fp = after.indexOf('.');
+    const fp = after.indexOf(".");
     const fd = after.search(HAS_DASH_RE);
     if (fd !== -1 && fp !== -1 && fd < fp) return false;
     if (fd !== -1 && fp === -1) return false;
@@ -175,20 +227,26 @@ class TextParser {
 
       const head = this.extractHeadwordParts(wordLine);
       if (!head) return null;
-      const { word, pronunciation, wordType, meaning: rawMeaning, inlineCompounds } = head;
+      const {
+        word,
+        pronunciation,
+        wordType,
+        meaning: rawMeaning,
+        inlineCompounds,
+      } = head;
 
       const entry = {
         word: word,
         originalWord: word,
-        pronunciation: this.normalizer.normalizeText(pronunciation || ''),
-        wordType: this.normalizer.normalizeText(wordType || ''),
-        meaning: this.normalizer.normalizeText(rawMeaning || ''),
+        pronunciation: this.normalizer.normalizeText(pronunciation || ""),
+        wordType: this.normalizer.normalizeText(wordType || ""),
+        meaning: this.normalizer.normalizeText(rawMeaning || ""),
         compounds: [],
         sourceLine: blockIndex + 1,
-        sourceFile: textFile?.filename || '',
+        sourceFile: textFile?.filename || "",
         textQuality: textFile?.quality || 1.0,
-        ancientChar: this.normalizer.normalizeText(ancientChar || ''),
-        rawText: firstLine.trim()
+        ancientChar: this.normalizer.normalizeText(ancientChar || ""),
+        rawText: firstLine.trim(),
       };
 
       for (const c of inlineCompounds) {
@@ -202,7 +260,9 @@ class TextParser {
 
       return this.finalizeEntry(entry);
     } catch (error) {
-      logger.warn(`Failed to parse block at index ${blockIndex}: ${error.message}`);
+      logger.warn(
+        `Failed to parse block at index ${blockIndex}: ${error.message}`,
+      );
       return null;
     }
   }
@@ -210,25 +270,54 @@ class TextParser {
   splitAncestor(firstLine) {
     const t = firstLine.trim();
     const m = t.match(ANCESTOR_PREFIX_RE);
-    const prefix = m ? m[1] : '';
+    const prefix = m ? m[1] : "";
     const wordLine = m ? t.slice(m[0].length) : t;
-    const ancientChar = prefix.replace(/\s/g, '').replace(/\|/g, '');
-    return { ancientChar: ancientChar || '', wordLine };
+    const ancientChar = prefix.replace(/\s/g, "").replace(/\|/g, "");
+    return { ancientChar: ancientChar || "", wordLine };
   }
 
   extractHeadwordParts(afterTab) {
     try {
       let rest = afterTab.trim();
-      const wordMatch = rest.match(/^([^\.]+?)\./);
+      const wordMatch = rest.match(/^([^.]+?)\./);
       if (!wordMatch) return null;
-      const word = wordMatch[1].trim();
-      if (!word) return null;
+      const rawWord = wordMatch[1].trim();
+      if (!rawWord) return null;
+
+      // Extract pronunciation from within the word field when present in
+      // parentheses, e.g. "Đậu (đỗ)" → word="Đậu", pronunciation="đỗ".
+      const { word, pronunciation: wordPronunciation } =
+        extractWordAndPronunciation(rawWord);
+
       rest = rest.substring(wordMatch[0].length).trim();
 
-      let pronunciation = '';
+      let pronunciation = wordPronunciation;
       const pronMatch = PRON_PAREN.exec(rest);
       if (pronMatch) {
-        pronunciation = pronMatch[1].trim().replace(/\.$/, '');
+        // Only use pronunciation from the meaning portion if we didn't already
+        // extract one from the word field (pattern: "Word (pron). type. meaning").
+        // Also skip annotations that appear BEFORE the word type (e.g. "(Đây.) n.")
+        // — these are notes, not pronunciations. Real pronunciations appear AFTER
+        // the word type (e.g. "c. (đỗ) ..." is a pronunciation, "Đó. (Đây.) n." is not).
+        if (!pronunciation) {
+          const candidate = pronMatch[1].trim().replace(/\.$/, "");
+          // Check if the text after this parentheses starts with a word type token.
+          const afterPron = rest.substring(pronMatch[0].length).trim();
+          const hasWordTypeAfter = /^[cCnN]\./.test(afterPron);
+          // A real pronunciation appears after the word type, not before it.
+          // Annotations like "(Đây.) n." appear before the word type and should be kept in meaning.
+          if (hasWordTypeAfter) {
+            // This looks like an annotation before the word type, not a pronunciation.
+            // Leave it in the meaning text.
+          } else if (
+            candidate.length <= 12 &&
+            !candidate.includes(".") &&
+            !/^coi chữ/i.test(candidate) &&
+            !/^thường/i.test(candidate)
+          ) {
+            pronunciation = candidate;
+          }
+        }
         rest = rest.substring(pronMatch[0].length).trim();
       }
 
@@ -240,7 +329,7 @@ class TextParser {
       let m;
       const localType = /^([cCnN])\.(?:\s+|$)/g;
       while ((m = localType.exec(rest)) !== null) {
-        if (m.index === 0 || rest[m.index - 1] === ' ') {
+        if (m.index === 0 || rest[m.index - 1] === " ") {
           typeTokens.push(m[1]);
           rest = rest.substring(m[0].length);
           localType.lastIndex = 0;
@@ -249,13 +338,13 @@ class TextParser {
         }
       }
 
-      const wordType = typeTokens.map(t => t + '.').join(' ');
+      const wordType = typeTokens.map((t) => t + ".").join(" ");
 
       const inlineCompounds = [];
       let meaning = rest.trim();
       const dashIdx = meaning.search(HAS_DASH_RE);
       if (dashIdx !== -1) {
-        const cut = meaning.lastIndexOf('.', dashIdx);
+        const cut = meaning.lastIndexOf(".", dashIdx);
         if (cut !== -1) {
           const compoundPart = meaning.substring(cut + 1).trim();
           meaning = meaning.substring(0, cut).trim();
@@ -273,7 +362,7 @@ class TextParser {
   parseCompoundLine(line, headword, ancientChar) {
     const raw = line.trim();
     if (!raw) return null;
-    if (raw.startsWith('{')) return null;
+    if (raw.startsWith("{")) return null;
     if (/^\}+$/.test(raw)) return null;
     return this.parseCompoundStatement(raw, headword, ancientChar, false);
   }
@@ -286,21 +375,25 @@ class TextParser {
   }
 
   splitPhraseMeaning(text) {
-    const pipeIdx = text.indexOf('|');
+    const pipeIdx = text.indexOf("|");
     if (pipeIdx !== -1) {
       const before = text.substring(0, pipeIdx).trim();
       const after = text.substring(pipeIdx + 1).trim();
-      const head = HAS_DASH_RE.test(before) ? before : (HAS_DASH_RE.test(after) ? after : before);
+      const head = HAS_DASH_RE.test(before)
+        ? before
+        : HAS_DASH_RE.test(after)
+          ? after
+          : before;
       const other = HAS_DASH_RE.test(before) ? after : before;
       return { phrase: head, meaning: other };
     }
-    const dotIdx = text.indexOf('.');
+    const dotIdx = text.indexOf(".");
     if (dotIdx === -1) {
-      return { phrase: text.trim(), meaning: '' };
+      return { phrase: text.trim(), meaning: "" };
     }
     return {
       phrase: text.substring(0, dotIdx).trim(),
-      meaning: text.substring(dotIdx + 1).trim()
+      meaning: text.substring(dotIdx + 1).trim(),
     };
   }
 
@@ -319,36 +412,38 @@ class TextParser {
       phrase: this.normalizer.normalizeText(phraseCore),
       compound: this.normalizer.normalizeText(expanded),
       rawPhrase: this.normalizer.normalizeText(phrase),
-      meaning: this.normalizer.normalizeText(meaning || ''),
+      meaning: this.normalizer.normalizeText(meaning || ""),
       ancientChars: this.normalizer.normalizeText(finalVariant || ancientChar),
-      isCompound: true
+      isCompound: true,
     };
   }
 
   finalizeEntry(entry) {
     entry.normalizedWord = this.normalizer.normalizeForSearch(entry.word);
-    entry.searchVariations = this.normalizer.generateSearchVariations(entry.word);
+    entry.searchVariations = this.normalizer.generateSearchVariations(
+      entry.word,
+    );
     entry.definition = this.buildDefinition(entry);
     return entry;
   }
 
   buildDefinition(entry) {
     const parts = [];
-    let header = `${entry.word}. ${entry.wordType || ''}`.trim();
+    let header = `${entry.word}. ${entry.wordType || ""}`.trim();
     if (entry.pronunciation) header += ` [${entry.pronunciation}]`;
     parts.push(header);
     parts.push(entry.meaning);
-    for (const c of (entry.compounds || [])) {
-      parts.push(c.compound + (c.meaning ? `. ${c.meaning}` : ''));
+    for (const c of entry.compounds || []) {
+      parts.push(c.compound + (c.meaning ? `. ${c.meaning}` : ""));
     }
-    return parts.filter(p => p).join('\n');
+    return parts.filter((p) => p).join("\n");
   }
 
   splitIntoLines(text) {
     return text
       .split(/[\n\r]+/)
-      .map(line => line.trim())
-      .filter(line => line.length > 0);
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
   }
 
   async batchParse(textFiles) {
@@ -358,7 +453,7 @@ class TextParser {
       successfulParses: 0,
       totalEntries: 0,
       totalCompounds: 0,
-      averageEntriesPerFile: 0
+      averageEntriesPerFile: 0,
     };
 
     for (const textFile of textFiles) {
@@ -367,28 +462,36 @@ class TextParser {
         allEntries.push(...parsedResult.parsedEntries);
         parsingStats.successfulParses++;
         parsingStats.totalEntries += parsedResult.parsedEntries.length;
-        parsingStats.totalCompounds += parsedResult.parsedEntries.reduce((sum, e) => sum + (e.compounds?.length || 0), 0);
+        parsingStats.totalCompounds += parsedResult.parsedEntries.reduce(
+          (sum, e) => sum + (e.compounds?.length || 0),
+          0,
+        );
       } catch (error) {
-        await logger.error(`Failed to parse ${textFile.filename}`, { error: error.message });
+        await logger.error(`Failed to parse ${textFile.filename}`, {
+          error: error.message,
+        });
       }
     }
 
-    parsingStats.averageEntriesPerFile = parsingStats.successfulParses > 0
-      ? parsingStats.totalEntries / parsingStats.successfulParses
-      : 0;
+    parsingStats.averageEntriesPerFile =
+      parsingStats.successfulParses > 0
+        ? parsingStats.totalEntries / parsingStats.successfulParses
+        : 0;
 
     return {
       entries: allEntries,
       stats: parsingStats,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     };
   }
 
   validateEntry(entry) {
     const errors = [];
-    if (!entry.word || entry.word.length < 1) errors.push('Word is missing');
-    if (!entry.meaning || entry.meaning.trim().length < 2) errors.push('Definition is too short or missing');
-    if (entry.word === entry.meaning) errors.push('Word and meaning are identical');
+    if (!entry.word || entry.word.length < 1) errors.push("Word is missing");
+    if (!entry.meaning || entry.meaning.trim().length < 2)
+      errors.push("Definition is too short or missing");
+    if (entry.word === entry.meaning)
+      errors.push("Word and meaning are identical");
     return { isValid: errors.length === 0, errors };
   }
 }
@@ -399,12 +502,14 @@ function stripAncestorPrefix(t) {
 }
 
 function stripVariantPrefix(line) {
-  const m = line.match(/^[| \t]*([\u3000-\u303F\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF\uE000-\uF8FF\u{20000}-\u{2FA1F}]+)?[| \t]*/u);
-  if (!m) return { text: line.trim(), variant: '' };
-  const variant = m[1] || '';
+  const m = line.match(
+    /^[| \t]*([\u3000-\u303F\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF\uE000-\uF8FF\u{20000}-\u{2FA1F}]+)?[| \t]*/u,
+  );
+  if (!m) return { text: line.trim(), variant: "" };
+  const variant = m[1] || "";
   let rest = line.substring(m[0].length);
-  rest = rest.replace(/^[| ]+/, '').trim();
-  return { text: rest, variant: (variant || '').trim() };
+  rest = rest.replace(/^[| ]+/, "").trim();
+  return { text: rest, variant: (variant || "").trim() };
 }
 
 const PRON_PAREN = /^\(([^)]*)\)\s*/;

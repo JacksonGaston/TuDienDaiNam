@@ -65,3 +65,7 @@ CLAUDE.md
 chi_tra.traineddata
 dainam.traineddata
 eng.traineddata
+.pi/
+.pi
+# pi plans (private drafts) — see ~/.pi/agent/plannotator.json
+.pi/agent/plan/
