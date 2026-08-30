@@ -207,8 +207,9 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   flagImage: {
-    width: 54,
-    height: 36,
+    width: 66,
+    height: 44,
+    marginTop: 16,
   },
   langToggle: {
     position: 'absolute',
